@@ -11,6 +11,7 @@ const afterPack = require('./build-after-pack')
 const options = {
   appId: 'cn.toside.music.desktop',
   productName: 'lx-music-desktop',
+  electronDist: './node_modules/electron/dist',
   beforePack,
   afterPack,
   protocols: {
