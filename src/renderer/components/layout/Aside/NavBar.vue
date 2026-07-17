@@ -74,6 +74,15 @@ export default {
           name: 'Download',
         },
         {
+          to: '/local',
+          tips: t('local_music'),
+          icon: '#icon-album',
+          iconSize: '0 0 425.2 425.2',
+          size,
+          name: 'Local',
+          enable: true,
+        },
+        {
           to: '/setting',
           tips: t('setting'),
           icon: '#icon-setting',

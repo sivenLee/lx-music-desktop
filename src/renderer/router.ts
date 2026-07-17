@@ -62,6 +62,14 @@ const router = createRouter({
         name: 'Setting',
       },
     },
+    {
+      path: '/local',
+      name: 'Local',
+      component: require('./views/Local/index.vue').default,
+      meta: {
+        name: 'Local',
+      },
+    },
     { path: '/:pathMatch(.*)*', redirect: '/search' },
   ],
   linkActiveClass: 'active-link',

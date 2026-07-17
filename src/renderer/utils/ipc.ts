@@ -1,5 +1,5 @@
 import { rendererSend, rendererInvoke, rendererOn, rendererOff } from '@common/rendererIpc'
-import { HOTKEY_RENDERER_EVENT_NAME, WIN_MAIN_RENDERER_EVENT_NAME, CMMON_EVENT_NAME } from '@common/ipcNames'
+import { HOTKEY_RENDERER_EVENT_NAME, WIN_MAIN_RENDERER_EVENT_NAME, CMMON_EVENT_NAME, LOCAL_MUSIC_EVENT_NAME } from '@common/ipcNames'
 import { type ProgressInfo, type UpdateDownloadedEvent, type UpdateInfo } from 'electron-updater'
 import { markRaw } from '@common/utils/vueTools'
 import * as hotKeys from '@common/hotKey'
@@ -852,4 +852,30 @@ export const downloadTasksRemove = async(ids: string[]) => {
 }
 export const downloadListClear = async() => {
   return rendererInvoke(WIN_MAIN_RENDERER_EVENT_NAME.download_list_clear)
+}
+
+export const localMusicGetDirectories = async(): Promise<LX.LocalMusic.LocalMusicDirectory[]> => {
+  return rendererInvoke<LX.LocalMusic.LocalMusicDirectory[]>(LOCAL_MUSIC_EVENT_NAME.get_directories)
+}
+
+export const localMusicAddDirectory = async(dirPath: string): Promise<LX.LocalMusic.LocalMusicDirectory> => {
+  return rendererInvoke<string, LX.LocalMusic.LocalMusicDirectory>(LOCAL_MUSIC_EVENT_NAME.add_directory, dirPath)
+}
+
+export const localMusicRemoveDirectory = async(dirId: string): Promise<void> => {
+  return rendererInvoke<string, void>(LOCAL_MUSIC_EVENT_NAME.remove_directory, dirId)
+}
+
+export const localMusicScanDirectory = async(dirPath: string): Promise<{
+  musicFiles: LX.Music.MusicInfoLocal[]
+  playlistFiles: string[]
+}> => {
+  return rendererInvoke<string, {
+    musicFiles: LX.Music.MusicInfoLocal[]
+    playlistFiles: string[]
+  }>(LOCAL_MUSIC_EVENT_NAME.scan_directory, dirPath)
+}
+
+export const localMusicParsePlaylist = async(playlistPath: string): Promise<LX.Music.MusicInfoLocal[]> => {
+  return rendererInvoke<string, LX.Music.MusicInfoLocal[]>(LOCAL_MUSIC_EVENT_NAME.parse_playlist, playlistPath)
 }

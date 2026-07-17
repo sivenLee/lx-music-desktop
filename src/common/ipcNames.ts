@@ -9,6 +9,13 @@ const modules = {
     get_app_setting: 'get_app_setting',
     set_app_setting: 'set_app_setting',
   },
+  localMusic: {
+    get_directories: 'local_music_get_directories',
+    add_directory: 'local_music_add_directory',
+    remove_directory: 'local_music_remove_directory',
+    scan_directory: 'local_music_scan_directory',
+    parse_playlist: 'local_music_parse_playlist',
+  },
   player: {
     invoke_play_music: 'play_music',
     invoke_play_next: 'play_next',
@@ -192,6 +199,7 @@ for (const moduleName of Object.keys(modules) as Array<keyof typeof modules>) {
 
 
 export const CMMON_EVENT_NAME = modules.common
+export const LOCAL_MUSIC_EVENT_NAME = modules.localMusic
 export const PLAYER_EVENT_NAME = modules.player
 export const DISLIKE_EVENT_NAME = modules.dislike
 export const WIN_MAIN_RENDERER_EVENT_NAME = modules.winMain

@@ -188,6 +188,20 @@ export const sortInsert = <T>(arr: Array<{ num: number, data: T }>, data: { num:
 }
 
 export const encodePath = (path: string) => {
+  // 将本地路径转换为正确的 file:// 协议格式
+  if (path.startsWith('file://')) return path
+  
+  // 处理 Windows 路径（例如：C:/path/to/file）
+  if (/^[A-Za-z]:[\\/]/.test(path)) {
+    return 'file:///' + encodeURI(path.replaceAll('\\', '/'))
+  }
+  
+  // 处理 Unix 路径（例如：/path/to/file）
+  if (path.startsWith('/')) {
+    return 'file://' + encodeURI(path)
+  }
+  
+  // 处理相对路径（作为备用方案）
   return encodeURI(path.replaceAll('\\', '/'))
 }
 
