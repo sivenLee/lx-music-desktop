@@ -1,30 +1,61 @@
 <template>
   <div :class="$style.container">
     <div :class="$style.header">
-      <div :class="$style.directorySelector">
-        <select
-          v-model="selectedDirectoryId"
-          :class="$style.select"
-          @change="handleDirectoryChange"
+      <div ref="directorySelectorRef" :class="$style.directorySelector">
+        <input
+          :value="currentDirectoryPath"
+          :class="$style.directoryInput"
+          type="text"
+          :placeholder="$t('no_item')"
+          readonly
+          @click="handleToggleDirectoryPopover"
+        />
+        <div
+          v-if="isDirectoryPopoverVisible"
+          :class="$style.directoryPopover"
         >
-          <option
+          <div
+            v-if="!localMusicState.directories.length"
+            :class="$style.directoryEmpty"
+          >
+            {{ $t('no_item') }}
+          </div>
+          <div
             v-for="dir in localMusicState.directories"
             :key="dir.id"
-            :value="dir.id"
+            :class="[
+              $style.directoryOption,
+              { [$style.activeDirectoryOption]: selectedDirectory?.id === dir.id },
+            ]"
           >
-            {{ dir.name }}
-          </option>
-        </select>
+            <button
+              type="button"
+              :class="$style.directoryOptionButton"
+              @click="handleSelectDirectory(dir)"
+            >
+              <span :class="$style.directoryOptionName">{{ dir.name }}</span>
+              <span :class="$style.directoryOptionPath">{{ dir.path }}</span>
+            </button>
+            <button
+              type="button"
+              :class="$style.directoryDeleteButton"
+              title="移除目录"
+              @click.stop="handleRemoveDirectory(dir)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
         <button :class="$style.button" title="添加目录" @click="addDirectory">
           +
         </button>
         <button
-          v-if="selectedDirectory"
           :class="$style.button"
-          title="移除目录"
-          @click="handleRemoveDirectory"
+          :disabled="!selectedDirectory"
+          title="刷新目录"
+          @click="handleRefreshDirectory"
         >
-          -
+          刷新
         </button>
       </div>
       <input
@@ -84,7 +115,7 @@
                 @dblclick="handlePlayMusic(item)"
               >
                 <div class="list-item-cell no-select" :class="$style.num" style="flex: 0 0 5%;">
-                  <div class="num">{{ index + 1 }}</div>
+                  <div class="num">{{ Number(index) + 1 }}</div>
                 </div>
                 <div class="list-item-cell auto name">
                   <span class="select name">{{ item.name }}</span>
@@ -109,7 +140,7 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { ref, computed, onMounted } from '@common/utils/vueTools'
+import { ref, computed, onMounted, onBeforeUnmount } from '@common/utils/vueTools'
 import { useI18n } from '@renderer/plugins/i18n'
 import { useLocalMusic } from './useLocalMusic'
 import { setPlayMusicInfo, setPlayListId } from '@renderer/store/player/action'
@@ -120,26 +151,39 @@ export default defineComponent({
   setup() {
     useI18n() // 用于模板中的 $t
     const localMusic = useLocalMusic()
+    const directorySelectorRef = ref<HTMLElement | null>(null)
+    const isDirectoryPopoverVisible = ref(false)
 
-    const selectedDirectoryId = ref<string>('')
+    const selectedDirectory = computed(() => localMusic.state.value.currentDirectory)
+    const currentDirectoryPath = computed(() => selectedDirectory.value?.path ?? '')
 
-    const selectedDirectory = computed(() =>
-      localMusic.state.value.directories.find(
-        (d) => d.id === selectedDirectoryId.value,
-      ),
-    )
-
-    const handleDirectoryChange = () => {
-      const dir = selectedDirectory.value
-      if (dir) {
-        void localMusic.selectDirectory(dir)
-      }
+    const handleToggleDirectoryPopover = () => {
+      isDirectoryPopoverVisible.value = !isDirectoryPopoverVisible.value
     }
 
-    const handleRemoveDirectory = () => {
-      const dir = selectedDirectory.value
-      if (dir) {
-        void localMusic.removeDirectory(dir)
+    const handleSelectDirectory = (directory: LX.LocalMusic.LocalMusicDirectory) => {
+      isDirectoryPopoverVisible.value = false
+      void localMusic.selectDirectory(directory)
+    }
+
+    const handleRemoveDirectory = (directory?: LX.LocalMusic.LocalMusicDirectory) => {
+      const targetDirectory = directory ?? selectedDirectory.value
+      if (!targetDirectory) return
+      if (selectedDirectory.value?.id === targetDirectory.id) {
+        isDirectoryPopoverVisible.value = false
+      }
+      void localMusic.removeDirectory(targetDirectory)
+    }
+
+    const handleRefreshDirectory = () => {
+      void localMusic.refreshDirectory()
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (!directorySelectorRef.value?.contains(target)) {
+        isDirectoryPopoverVisible.value = false
       }
     }
 
@@ -151,16 +195,25 @@ export default defineComponent({
     }
 
     onMounted(() => {
+      document.addEventListener('mousedown', handleClickOutside)
       void localMusic.init()
+    })
+
+    onBeforeUnmount(() => {
+      document.removeEventListener('mousedown', handleClickOutside)
     })
 
     return {
       ...localMusic,
       localMusicState: localMusic.state,
-      selectedDirectoryId,
+      directorySelectorRef,
+      isDirectoryPopoverVisible,
       selectedDirectory,
-      handleDirectoryChange,
+      currentDirectoryPath,
+      handleToggleDirectoryPopover,
+      handleSelectDirectory,
       handleRemoveDirectory,
+      handleRefreshDirectory,
       handlePlayMusic,
     }
   },
@@ -177,32 +230,122 @@ export default defineComponent({
 }
 
 .header {
+  position: relative;
+  z-index: 20;
   display: flex;
   padding: 10px;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-primary-alpha-900);
 }
 
 .directorySelector {
+  position: relative;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-.select {
+.directoryInput {
   padding: 5px 10px;
   border-radius: 4px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-primary-background);
   background: var(--color-background);
   color: var(--color-font);
-  min-width: 200px;
+  min-width: 260px;
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+
+  &:focus,
+  &:hover {
+    border-color: var(--color-primary-background);
+  }
+}
+
+.directoryPopover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 360px;
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: 6px;
+  border: 1px solid var(--color-primary-background);
+  background: var(--color-000);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  z-index: 999;
+}
+
+.directoryEmpty {
+  padding: 12px;
+  color: var(--color-font-label);
+}
+
+.directoryOption {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-primary-alpha-900);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.activeDirectoryOption {
+  background: var(--color-primary-background-hover);
+}
+
+.directoryOptionButton {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-primary-background-hover);
+  }
+}
+
+.directoryOptionName {
+  display: block;
+  font-size: 14px;
+}
+
+.directoryOptionPath {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-font-label);
+  word-break: break-all;
+}
+
+.directoryDeleteButton {
+  flex: 0 0 auto;
+  width: 36px;
+  border: 0;
+  border-left: 1px solid var(--color-primary-alpha-900);
+  background: transparent;
+  color: var(--color-font-label);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-primary-background-hover);
+    color: var(--color-danger, #f56c6c);
+  }
 }
 
 .button {
-  padding: 5px 10px;
+  padding: 0px 10px;
+  font-size: 12px;
+  line-height: 26px;
   border-radius: 4px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-primary-background);
   background: var(--color-primary-background-hover);
   color: var(--color-font);
   cursor: pointer;
@@ -210,13 +353,18 @@ export default defineComponent({
   &:hover {
     background: var(--color-primary-background);
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 }
 
 .searchInput {
   flex: 1;
   padding: 5px 10px;
   border-radius: 4px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-primary-background);
   background: var(--color-background);
   color: var(--color-font);
 }
@@ -229,7 +377,7 @@ export default defineComponent({
 
 .sidebar {
   width: 200px;
-  border-right: 1px solid var(--color-divider);
+  border-right: 1px solid var(--color-primary-alpha-900);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -238,7 +386,7 @@ export default defineComponent({
 .sidebarHeader {
   padding: 10px;
   font-weight: bold;
-  border-bottom: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-primary-alpha-900);
 }
 
 .playlistList {
@@ -253,6 +401,9 @@ export default defineComponent({
 .playlistItem {
   padding: 8px 10px;
   cursor: pointer;
+  font-size: 12px;
+  line-height: 1.2;
+  word-break: break-all;
 
   &:hover {
     background: var(--color-primary-background-hover);

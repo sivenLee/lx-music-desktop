@@ -72,6 +72,11 @@ export function useLocalMusic() {
     }
   }
 
+  const refreshDirectory = async() => {
+    if (!state.value.currentDirectory) return
+    await selectDirectory(state.value.currentDirectory)
+  }
+
   const addDirectory = async() => {
     const result = await showSelectDialog({
       properties: ['openDirectory'],
@@ -120,7 +125,7 @@ export function useLocalMusic() {
   }
 
   const getPlaylistName = (playlistPath: string) => {
-    return path.basename(playlistPath)
+    return path.basename(playlistPath, path.extname(playlistPath))
   }
 
   return {
@@ -128,6 +133,7 @@ export function useLocalMusic() {
     filteredMusicFiles,
     init,
     selectDirectory,
+    refreshDirectory,
     addDirectory,
     removeDirectory,
     selectPlaylist,
