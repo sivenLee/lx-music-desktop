@@ -11,10 +11,15 @@ const modules = {
   },
   localMusic: {
     get_directories: 'local_music_get_directories',
+    get_state: 'local_music_get_state',
+    set_state: 'local_music_set_state',
     add_directory: 'local_music_add_directory',
     remove_directory: 'local_music_remove_directory',
     scan_directory: 'local_music_scan_directory',
     parse_playlist: 'local_music_parse_playlist',
+    create_playlist: 'local_music_create_playlist',
+    rename_playlist: 'local_music_rename_playlist',
+    delete_playlist: 'local_music_delete_playlist',
   },
   player: {
     invoke_play_music: 'play_music',

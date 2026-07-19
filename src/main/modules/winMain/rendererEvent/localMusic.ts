@@ -3,6 +3,7 @@ import { mainHandle } from '@common/mainIpc'
 import getStore from '@main/utils/store'
 import { checkPath, basename, extname } from '@common/utils/nodejs'
 import { formatPlayTime } from '@common/utils/common'
+import fs from 'node:fs'
 import {
   scanDirectory,
   parseM3UPlaylist,
@@ -12,6 +13,35 @@ import path from 'node:path'
 
 // 本地音乐配置存储的名称
 const LOCAL_MUSIC_STORE_NAME = 'localMusic'
+const LOCAL_MUSIC_VIEW_STATE_KEY = 'viewState'
+
+const getViewState = (store: ReturnType<typeof getStore>) => {
+  return store.get<LX.LocalMusic.LocalMusicViewState>(LOCAL_MUSIC_VIEW_STATE_KEY) ?? {
+    currentDirectoryId: null,
+    currentPlaylistPath: null,
+  }
+}
+
+const setViewState = (store: ReturnType<typeof getStore>, state: LX.LocalMusic.LocalMusicViewState) => {
+  store.set(LOCAL_MUSIC_VIEW_STATE_KEY, state)
+}
+
+const assertValidPlaylistName = (name: string) => {
+  const trimName = name.trim()
+  if (!trimName) throw new Error('Invalid playlist name')
+  if (/[\\/:*?"<>|]/.test(trimName)) throw new Error('Invalid playlist name')
+  return trimName
+}
+
+const getPlaylistFilePath = (dirPath: string, name: string) => {
+  const base = assertValidPlaylistName(name)
+  const fileName = /\.(m3u|m3u8)$/i.test(base) ? base : `${base}.m3u8`
+  const playlistPath = path.join(dirPath, fileName)
+  const resolvedDir = path.resolve(dirPath) + path.sep
+  const resolvedFile = path.resolve(playlistPath)
+  if (!resolvedFile.startsWith(resolvedDir)) throw new Error('Invalid playlist path')
+  return resolvedFile
+}
 
 const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfoLocal | null> => {
   if (!await checkPath(filePath)) return null
@@ -55,6 +85,16 @@ export default () => {
     return store.get<LX.LocalMusic.LocalMusicDirectory[]>('directories') ?? []
   })
 
+  mainHandle(LOCAL_MUSIC_EVENT_NAME.get_state, async() => {
+    const store = getStore(LOCAL_MUSIC_STORE_NAME)
+    return getViewState(store)
+  })
+
+  mainHandle<LX.LocalMusic.LocalMusicViewState, void>(LOCAL_MUSIC_EVENT_NAME.set_state, async({ params }) => {
+    const store = getStore(LOCAL_MUSIC_STORE_NAME)
+    setViewState(store, params)
+  })
+
   // 添加新目录
   mainHandle<string, LX.LocalMusic.LocalMusicDirectory>(LOCAL_MUSIC_EVENT_NAME.add_directory, async({ params: dirPath }) => {
     const store = getStore(LOCAL_MUSIC_STORE_NAME)
@@ -81,6 +121,14 @@ export default () => {
     let directories = store.get<LX.LocalMusic.LocalMusicDirectory[]>('directories') ?? []
     directories = directories.filter(d => d.id !== dirId)
     store.set('directories', directories)
+
+    const viewState = getViewState(store)
+    if (viewState.currentDirectoryId === dirId) {
+      setViewState(store, {
+        currentDirectoryId: directories[0]?.id ?? null,
+        currentPlaylistPath: null,
+      })
+    }
   })
 
   // 扫描目录获取文件
@@ -113,5 +161,50 @@ export default () => {
     }
 
     return musicInfos
+  })
+
+  mainHandle<{
+    dirPath: string
+    name: string
+  }, string>(LOCAL_MUSIC_EVENT_NAME.create_playlist, async({ params }) => {
+    const playlistPath = getPlaylistFilePath(params.dirPath, params.name)
+    if (await checkPath(playlistPath)) throw new Error('Playlist already exists')
+    await fs.promises.writeFile(playlistPath, '#EXTM3U\n', { encoding: 'utf8', flag: 'wx' })
+    return playlistPath
+  })
+
+  mainHandle<{
+    playlistPath: string
+    name: string
+  }, string>(LOCAL_MUSIC_EVENT_NAME.rename_playlist, async({ params }) => {
+    const store = getStore(LOCAL_MUSIC_STORE_NAME)
+    const oldPath = params.playlistPath
+    if (!await checkPath(oldPath)) throw new Error('Playlist not exists')
+    const dirPath = path.dirname(oldPath)
+    const newPath = getPlaylistFilePath(dirPath, params.name)
+    if (oldPath === newPath) return newPath
+    if (await checkPath(newPath)) throw new Error('Playlist already exists')
+    await fs.promises.rename(oldPath, newPath)
+    const viewState = getViewState(store)
+    if (viewState.currentPlaylistPath === oldPath) {
+      setViewState(store, {
+        ...viewState,
+        currentPlaylistPath: newPath,
+      })
+    }
+    return newPath
+  })
+
+  mainHandle<string, void>(LOCAL_MUSIC_EVENT_NAME.delete_playlist, async({ params: playlistPath }) => {
+    const store = getStore(LOCAL_MUSIC_STORE_NAME)
+    if (!await checkPath(playlistPath)) return
+    await fs.promises.unlink(playlistPath)
+    const viewState = getViewState(store)
+    if (viewState.currentPlaylistPath === playlistPath) {
+      setViewState(store, {
+        ...viewState,
+        currentPlaylistPath: null,
+      })
+    }
   })
 }

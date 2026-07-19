@@ -27,6 +27,10 @@ declare namespace LX {
       path: string
       musicFiles: LocalMusicFile[]
     }
+
+    interface LocalMusicViewState {
+      currentDirectoryId: string | null
+      currentPlaylistPath: string | null
+    }
   }
 }
-

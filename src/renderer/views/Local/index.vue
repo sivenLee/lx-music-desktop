@@ -73,15 +73,32 @@
             :class="[$style.playlistItem, { [$style.active]: !localMusicState.currentPlaylist }]"
             @click="showAllFiles"
           >
-            {{ $t('local_music_all_files') }}
+            <span :class="$style.playlistName">{{ $t('local_music_all_files') }}</span>
+            <span :class="$style.playlistCount">{{ localMusicState.allMusicFiles.length }}</span>
           </li>
           <li
             v-for="(playlist, index) in localMusicState.playlistFiles"
             :key="index"
-            :class="[$style.playlistItem, { [$style.active]: localMusicState.currentPlaylist === playlist }]"
+            :class="[
+              $style.playlistItem,
+              { [$style.active]: localMusicState.currentPlaylist === playlist },
+              { [$style.clicked]: rightClickPlaylistPath === playlist },
+            ]"
             @click="selectPlaylist(playlist)"
+            @contextmenu.prevent="handlePlaylistContextMenu($event, playlist)"
           >
-            {{ getPlaylistName(playlist) }}
+            <span :class="$style.playlistName">{{ getPlaylistName(playlist) }}</span>
+            <span :class="$style.playlistCount">{{ localMusicState.playlistCounts[playlist] ?? 0 }}</span>
+          </li>
+          <li :class="$style.playlistCreateItem">
+            <button
+              type="button"
+              :class="$style.playlistAddBtn"
+              title="新增播放列表"
+              @click="handleStartCreatePlaylist"
+            >
+              +
+            </button>
           </li>
         </ul>
       </div>
@@ -111,11 +128,18 @@
               <div
                 v-for="(item, index) in filteredMusicFiles"
                 :key="item.id"
-                :class="[$style.listItem, 'list-item']"
+                :class="[$style.listItem, 'list-item', { [$style.active]: currentPlayingMusicId === item.id }]"
                 @dblclick="handlePlayMusic(item)"
               >
                 <div class="list-item-cell no-select" :class="$style.num" style="flex: 0 0 5%;">
-                  <div class="num">{{ Number(index) + 1 }}</div>
+                  <transition name="play-active">
+                    <div v-if="currentPlayingMusicId === item.id" :class="$style.playIcon">
+                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="50%" viewBox="0 0 512 512" space="preserve">
+                        <use xlink:href="#icon-play-outline" />
+                      </svg>
+                    </div>
+                    <div v-else class="num">{{ Number(index) + 1 }}</div>
+                  </transition>
                 </div>
                 <div class="list-item-cell auto name">
                   <span class="select name">{{ item.name }}</span>
@@ -135,18 +159,38 @@
         </div>
       </div>
     </div>
+    <base-menu v-model="isShowPlaylistMenu" :menus="playlistMenus" :xy="playlistMenuLocation" item-name="name" @menu-click="handlePlaylistMenuClick" />
+    <material-modal :show="isPlaylistEditorVisible" width="420px" max-width="420px" @close="handleClosePlaylistEditor">
+      <div :class="$style.playlistEditor">
+        <div :class="$style.playlistEditorTitle">{{ playlistEditorTitle }}</div>
+        <input
+          ref="playlistEditorInputRef"
+          v-model="playlistEditorName"
+          :class="$style.playlistEditorInput"
+          type="text"
+          :placeholder="playlistEditorPlaceholder"
+          @keydown.enter.stop="handleConfirmPlaylistEditor"
+          @keydown.esc="handleClosePlaylistEditor"
+        />
+        <div :class="$style.playlistEditorActions">
+          <button type="button" :class="$style.playlistEditorBtn" @click="handleClosePlaylistEditor">取消</button>
+          <button type="button" :class="[$style.playlistEditorBtn, $style.playlistEditorPrimaryBtn]" @click="handleConfirmPlaylistEditor">确认</button>
+        </div>
+      </div>
+    </material-modal>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
-import { ref, computed, onMounted, onBeforeUnmount } from '@common/utils/vueTools'
+import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick } from '@common/utils/vueTools'
 import { useI18n } from '@renderer/plugins/i18n'
 import { useLocalMusic } from './useLocalMusic'
 import { setPlayMusicInfo, setPlayListId } from '@renderer/store/player/action'
 import { setMusicUrl } from '@renderer/core/player'
+import { playMusicInfo } from '@renderer/store/player/state'
+import { dialog } from '@renderer/plugins/Dialog'
 
-export default defineComponent({
+export default {
   name: 'LocalMusic',
   setup() {
     useI18n() // 用于模板中的 $t
@@ -156,6 +200,10 @@ export default defineComponent({
 
     const selectedDirectory = computed(() => localMusic.state.value.currentDirectory)
     const currentDirectoryPath = computed(() => selectedDirectory.value?.path ?? '')
+    const currentPlayingMusicId = computed(() => {
+      if (playMusicInfo.listId !== 'local_music_temp') return null
+      return playMusicInfo.musicInfo?.id ?? null
+    })
 
     const handleToggleDirectoryPopover = () => {
       isDirectoryPopoverVisible.value = !isDirectoryPopoverVisible.value
@@ -187,6 +235,88 @@ export default defineComponent({
       }
     }
 
+    const playlistMenuLocation = reactive({ x: 0, y: 0 })
+    const isShowPlaylistMenu = ref(false)
+    const rightClickPlaylistPath = ref<string>('')
+
+    const playlistMenus = computed(() => [
+      { name: window.i18n.t('lists__rename'), action: 'rename' },
+      { name: window.i18n.t('lists__remove'), action: 'remove' },
+    ])
+
+    const isPlaylistEditorVisible = ref(false)
+    const playlistEditorMode = ref<'create' | 'rename'>('create')
+    const playlistEditorName = ref('')
+    const editingPlaylistPath = ref<string>('')
+    const playlistEditorInputRef = ref<HTMLInputElement | null>(null)
+    const playlistEditorTitle = computed(() => playlistEditorMode.value === 'create' ? '新建播放列表' : '重命名播放列表')
+    const playlistEditorPlaceholder = computed(() => playlistEditorMode.value === 'create' ? '请输入播放列表名称' : '请输入新的播放列表名称')
+
+    const handlePlaylistContextMenu = (event: MouseEvent, playlistPath: string) => {
+      rightClickPlaylistPath.value = playlistPath
+      playlistMenuLocation.x = event.pageX
+      playlistMenuLocation.y = event.pageY
+      isShowPlaylistMenu.value = true
+    }
+
+    const handlePlaylistMenuClick = async(item: { name: string, action: string } | null) => {
+      if (!item) return
+      const playlistPath = rightClickPlaylistPath.value
+      if (!playlistPath) return
+      switch (item.action) {
+        case 'rename':
+          isShowPlaylistMenu.value = false
+          playlistEditorMode.value = 'rename'
+          isPlaylistEditorVisible.value = true
+          editingPlaylistPath.value = playlistPath
+          playlistEditorName.value = localMusic.getPlaylistName(playlistPath)
+          break
+        case 'remove':
+          if (!await dialog.confirm('确认删除该播放列表？')) return
+          await localMusic.deletePlaylist(playlistPath)
+          break
+      }
+    }
+
+    const handleStartCreatePlaylist = () => {
+      playlistEditorMode.value = 'create'
+      playlistEditorName.value = ''
+      editingPlaylistPath.value = ''
+      isPlaylistEditorVisible.value = true
+    }
+
+    const handleClosePlaylistEditor = () => {
+      isPlaylistEditorVisible.value = false
+      playlistEditorName.value = ''
+      editingPlaylistPath.value = ''
+    }
+
+    const handleConfirmPlaylistEditor = async() => {
+      if (playlistEditorMode.value === 'create') {
+        const ok = await localMusic.createPlaylist(playlistEditorName.value)
+        if (!ok) return
+        handleClosePlaylistEditor()
+        return
+      }
+      const playlistPath = editingPlaylistPath.value
+      if (!playlistPath) return
+      const newPath = await localMusic.renamePlaylist(playlistPath, playlistEditorName.value)
+      if (!newPath) return
+      handleClosePlaylistEditor()
+    }
+
+    watch(isShowPlaylistMenu, val => {
+      if (!val) rightClickPlaylistPath.value = ''
+    })
+
+    watch(isPlaylistEditorVisible, val => {
+      if (!val) return
+      void nextTick(() => {
+        playlistEditorInputRef.value?.focus()
+        playlistEditorInputRef.value?.select()
+      })
+    })
+
     const handlePlayMusic = (musicInfo: LX.Music.MusicInfo) => {
       const localListId = 'local_music_temp'
       setPlayListId(localListId)
@@ -210,14 +340,30 @@ export default defineComponent({
       isDirectoryPopoverVisible,
       selectedDirectory,
       currentDirectoryPath,
+      currentPlayingMusicId,
       handleToggleDirectoryPopover,
       handleSelectDirectory,
       handleRemoveDirectory,
       handleRefreshDirectory,
+      playlistMenuLocation,
+      isShowPlaylistMenu,
+      playlistMenus,
+      rightClickPlaylistPath,
+      handlePlaylistContextMenu,
+      handlePlaylistMenuClick,
+      isPlaylistEditorVisible,
+      playlistEditorTitle,
+      playlistEditorPlaceholder,
+      playlistEditorName,
+      playlistEditorInputRef,
+      editingPlaylistPath,
+      handleStartCreatePlaylist,
+      handleClosePlaylistEditor,
+      handleConfirmPlaylistEditor,
       handlePlayMusic,
     }
   },
-})
+}
 </script>
 
 <style lang="less" module>
@@ -399,11 +545,14 @@ export default defineComponent({
 }
 
 .playlistItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 10px;
   cursor: pointer;
   font-size: 12px;
   line-height: 1.2;
-  word-break: break-all;
 
   &:hover {
     background: var(--color-primary-background-hover);
@@ -413,6 +562,36 @@ export default defineComponent({
     background: var(--color-primary-background);
     color: var(--color-primary);
   }
+}
+
+.playlistName {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.playlistCount {
+  flex: 0 0 auto;
+  color: var(--color-font-label);
+  font-size: 12px;
+}
+
+.playlistItem.clicked {
+  background: var(--color-primary-background-hover);
+}
+
+.playlistCreateItem {
+  padding: 8px 10px;
+}
+
+.playlistAddBtn {
+  width: 100%;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px dashed var(--color-primary-background);
+  background: transparent;
+  color: var(--color-font-label);
+  cursor: pointer;
 }
 
 .mainContent {
@@ -477,6 +656,10 @@ export default defineComponent({
   &:hover {
     background: var(--color-primary-background-hover);
   }
+
+  &.active {
+    background: var(--color-primary-background);
+  }
 }
 
 .num {
@@ -485,5 +668,62 @@ export default defineComponent({
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+.playIcon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-button-font);
+  opacity: .7;
+}
+
+.playlistEditor {
+  padding: 22px 24px 20px;
+}
+
+.playlistEditorTitle {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 14px;
+}
+
+.playlistEditorInput {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid var(--color-primary-background);
+  background: var(--color-background);
+  color: var(--color-font);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.playlistEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.playlistEditorBtn {
+  min-width: 72px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 4px;
+  border: 1px solid var(--color-primary-background);
+  background: var(--color-background);
+  color: var(--color-font);
+  cursor: pointer;
+}
+
+.playlistEditorPrimaryBtn {
+  background: var(--color-primary-background-hover);
 }
 </style>
