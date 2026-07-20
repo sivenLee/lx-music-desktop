@@ -70,10 +70,17 @@
         <div :class="$style.sidebarHeader">{{ $t('local_music_playlists') }}</div>
         <ul :class="$style.playlistList">
           <li
-            :class="[$style.playlistItem, { [$style.active]: !localMusicState.currentPlaylist }]"
+            :class="[
+              $style.playlistItem,
+              { [$style.active]: !localMusicState.currentPlaylist },
+              { [$style.queueActive]: isQueueAllFilesActive },
+            ]"
             @click="showAllFiles"
           >
-            <span :class="$style.playlistName">{{ $t('local_music_all_files') }}</span>
+            <span :class="$style.playlistName">
+              {{ $t('local_music_all_files') }}
+              <span v-if="isQueueAllFilesActive" :class="$style.queueTag">播放中</span>
+            </span>
             <span :class="$style.playlistCount">{{ localMusicState.allMusicFiles.length }}</span>
           </li>
           <li
@@ -83,11 +90,15 @@
               $style.playlistItem,
               { [$style.active]: localMusicState.currentPlaylist === playlist },
               { [$style.clicked]: rightClickPlaylistPath === playlist },
+              { [$style.queueActive]: isQueuePlaylistActive(playlist) },
             ]"
             @click="selectPlaylist(playlist)"
             @contextmenu.prevent="handlePlaylistContextMenu($event, playlist)"
           >
-            <span :class="$style.playlistName">{{ getPlaylistName(playlist) }}</span>
+            <span :class="$style.playlistName">
+              {{ getPlaylistName(playlist) }}
+              <span v-if="isQueuePlaylistActive(playlist)" :class="$style.queueTag">播放中</span>
+            </span>
             <span :class="$style.playlistCount">{{ localMusicState.playlistCounts[playlist] ?? 0 }}</span>
           </li>
           <li :class="$style.playlistCreateItem">
@@ -110,7 +121,7 @@
           <div v-if="!filteredMusicFiles.length" :class="$style.noItem">
             <p>{{ $t('no_item') }}</p>
           </div>
-          <div v-else :class="$style.list">
+          <div v-else :class="[$style.list, 'list']">
             <div class="thead">
               <table>
                 <thead>
@@ -124,12 +135,18 @@
                 </thead>
               </table>
             </div>
-            <div :class="$style.listContent">
+            <div :class="$style.content">
               <div
                 v-for="(item, index) in filteredMusicFiles"
                 :key="item.id"
-                :class="[$style.listItem, 'list-item', { [$style.active]: currentPlayingMusicId === item.id }]"
+                :class="[
+                  $style.listItem,
+                  'list-item',
+                  { [$style.active]: currentPlayingMusicId === item.id },
+                  { [$style.clicked]: rightClickMusicId === item.id },
+                ]"
                 @dblclick="handlePlayMusic(item)"
+                @contextmenu.prevent="handleMusicContextMenu($event, item)"
               >
                 <div class="list-item-cell no-select" :class="$style.num" style="flex: 0 0 5%;">
                   <transition name="play-active">
@@ -160,6 +177,7 @@
       </div>
     </div>
     <base-menu v-model="isShowPlaylistMenu" :menus="playlistMenus" :xy="playlistMenuLocation" item-name="name" @menu-click="handlePlaylistMenuClick" />
+    <base-menu v-model="isShowMusicMenu" :menus="musicMenus" :xy="musicMenuLocation" item-name="name" @menu-click="handleMusicMenuClick" />
     <material-modal :show="isPlaylistEditorVisible" width="420px" max-width="420px" @close="handleClosePlaylistEditor">
       <div :class="$style.playlistEditor">
         <div :class="$style.playlistEditorTitle">{{ playlistEditorTitle }}</div>
@@ -178,30 +196,57 @@
         </div>
       </div>
     </material-modal>
+    <material-modal :show="isMusicAddVisible" max-width="70%" min-width="200px" @close="handleCloseMusicAddModal">
+      <main :class="$style.musicAddModal">
+        <h2>{{ musicAddTitle }}</h2>
+        <div v-if="localMusicState.playlistFiles.length" class="scroll" :class="$style.musicAddBtnContent">
+          <button
+            v-for="playlist in localMusicState.playlistFiles"
+            :key="playlist"
+            type="button"
+            :class="$style.musicAddBtn"
+            @click="handleAddMusicToPlaylist(playlist)"
+          >
+            {{ getPlaylistName(playlist) }}
+          </button>
+        </div>
+        <div v-else :class="$style.musicAddEmpty">
+          {{ $t('no_item') }}
+        </div>
+      </main>
+    </material-modal>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick } from '@common/utils/vueTools'
+import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick, toRaw } from '@common/utils/vueTools'
 import { useI18n } from '@renderer/plugins/i18n'
 import { useLocalMusic } from './useLocalMusic'
-import { setPlayMusicInfo, setPlayListId } from '@renderer/store/player/action'
-import { setMusicUrl } from '@renderer/core/player'
+import { overwriteListMusics, clearListMusics } from '@renderer/store/list/action'
+import { playListById, stop } from '@renderer/core/player'
+import { setPlayListId, setPlayMusicInfo } from '@renderer/store/player/action'
 import { playMusicInfo } from '@renderer/store/player/state'
 import { dialog } from '@renderer/plugins/Dialog'
+
+const LOCAL_MUSIC_QUEUE_ID = 'local_music_queue'
 
 export default {
   name: 'LocalMusic',
   setup() {
-    useI18n() // 用于模板中的 $t
+    const t = useI18n()
     const localMusic = useLocalMusic()
     const directorySelectorRef = ref<HTMLElement | null>(null)
     const isDirectoryPopoverVisible = ref(false)
 
     const selectedDirectory = computed(() => localMusic.state.value.currentDirectory)
     const currentDirectoryPath = computed(() => selectedDirectory.value?.path ?? '')
+    const currentQueueKey = computed(() => {
+      if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return ''
+      return activeLocalQueueKey.value
+    })
     const currentPlayingMusicId = computed(() => {
-      if (playMusicInfo.listId !== 'local_music_temp') return null
+      if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return null
+      if (currentQueueKey.value !== getLocalQueueKey()) return null
       return playMusicInfo.musicInfo?.id ?? null
     })
 
@@ -238,10 +283,28 @@ export default {
     const playlistMenuLocation = reactive({ x: 0, y: 0 })
     const isShowPlaylistMenu = ref(false)
     const rightClickPlaylistPath = ref<string>('')
+    const musicMenuLocation = reactive({ x: 0, y: 0 })
+    const isShowMusicMenu = ref(false)
+    const rightClickMusicInfo = ref<LX.Music.MusicInfoLocal | null>(null)
+    const rightClickMusicId = computed(() => rightClickMusicInfo.value?.id ?? null)
+    const activeLocalQueueKey = ref('')
 
     const playlistMenus = computed(() => [
       { name: window.i18n.t('lists__rename'), action: 'rename' },
       { name: window.i18n.t('lists__remove'), action: 'remove' },
+    ])
+    const musicMenus = computed(() => [
+      { name: t('list__play'), action: 'play' },
+      {
+        name: t('list__add_to'),
+        action: 'addTo',
+        disabled: !localMusic.state.value.playlistFiles.length,
+      },
+      {
+        name: t('list__remove'),
+        action: 'remove',
+        disabled: !localMusic.state.value.currentPlaylist,
+      },
     ])
 
     const isPlaylistEditorVisible = ref(false)
@@ -251,6 +314,9 @@ export default {
     const playlistEditorInputRef = ref<HTMLInputElement | null>(null)
     const playlistEditorTitle = computed(() => playlistEditorMode.value === 'create' ? '新建播放列表' : '重命名播放列表')
     const playlistEditorPlaceholder = computed(() => playlistEditorMode.value === 'create' ? '请输入播放列表名称' : '请输入新的播放列表名称')
+    const isMusicAddVisible = ref(false)
+    const selectedAddMusicInfo = ref<LX.Music.MusicInfoLocal | null>(null)
+    const musicAddTitle = computed(() => selectedAddMusicInfo.value ? '添加歌曲到' : '添加到')
 
     const handlePlaylistContextMenu = (event: MouseEvent, playlistPath: string) => {
       rightClickPlaylistPath.value = playlistPath
@@ -259,13 +325,23 @@ export default {
       isShowPlaylistMenu.value = true
     }
 
+    const clearLocalQueueAndStop = async() => {
+      activeLocalQueueKey.value = ''
+      await clearListMusics([LOCAL_MUSIC_QUEUE_ID])
+      if (playMusicInfo.listId === LOCAL_MUSIC_QUEUE_ID) {
+        stop()
+        setPlayMusicInfo(null, null)
+        setPlayListId(null)
+      }
+    }
+
     const handlePlaylistMenuClick = async(item: { name: string, action: string } | null) => {
-      if (!item) return
       const playlistPath = rightClickPlaylistPath.value
+      isShowPlaylistMenu.value = false
+      if (!item) return
       if (!playlistPath) return
       switch (item.action) {
         case 'rename':
-          isShowPlaylistMenu.value = false
           playlistEditorMode.value = 'rename'
           isPlaylistEditorVisible.value = true
           editingPlaylistPath.value = playlistPath
@@ -274,7 +350,90 @@ export default {
         case 'remove':
           if (!await dialog.confirm('确认删除该播放列表？')) return
           await localMusic.deletePlaylist(playlistPath)
+          if (activeLocalQueueKey.value === `playlist:${playlistPath}`) {
+            await clearLocalQueueAndStop()
+          }
           break
+      }
+    }
+
+    const getLocalQueueKey = (playlistPath = localMusic.state.value.currentPlaylist) => {
+      if (playlistPath) return `playlist:${playlistPath}`
+      return `all:${localMusic.state.value.currentDirectory?.id ?? ''}`
+    }
+    const isQueuePlaylistActive = (playlistPath: string) => currentQueueKey.value === `playlist:${playlistPath}`
+    const isQueueAllFilesActive = computed(() => currentQueueKey.value === getLocalQueueKey(null))
+
+    const syncLocalQueue = async(musicFiles: LX.Music.MusicInfoLocal[]) => {
+      await overwriteListMusics({
+        listId: LOCAL_MUSIC_QUEUE_ID,
+        musicInfos: musicFiles.map(musicInfo => {
+          const rawMusicInfo = toRaw(musicInfo)
+          return {
+            ...rawMusicInfo,
+            meta: { ...toRaw(rawMusicInfo.meta) },
+          }
+        }),
+      })
+    }
+
+    const playLocalMusic = async(musicInfo: LX.Music.MusicInfoLocal) => {
+      const queue = localMusic.state.value.musicFiles
+      if (!queue.length) return
+      activeLocalQueueKey.value = getLocalQueueKey()
+      await syncLocalQueue(queue)
+      playListById(LOCAL_MUSIC_QUEUE_ID, musicInfo.id)
+    }
+
+    const handlePlayMusic = (musicInfo: LX.Music.MusicInfoLocal) => {
+      void playLocalMusic(musicInfo)
+    }
+
+    const handleMusicContextMenu = (event: MouseEvent, musicInfo: LX.Music.MusicInfoLocal) => {
+      rightClickMusicInfo.value = musicInfo
+      musicMenuLocation.x = event.pageX
+      musicMenuLocation.y = event.pageY
+      isShowMusicMenu.value = true
+    }
+
+    const handleCloseMusicAddModal = () => {
+      isMusicAddVisible.value = false
+      selectedAddMusicInfo.value = null
+    }
+
+    const handleAddMusicToPlaylist = async(playlistPath: string) => {
+      const musicInfo = selectedAddMusicInfo.value
+      if (!musicInfo) return
+      const updatedList = await localMusic.addMusicToPlaylist(playlistPath, musicInfo)
+      if (!updatedList) return
+      if (playMusicInfo.listId === LOCAL_MUSIC_QUEUE_ID && activeLocalQueueKey.value === `playlist:${playlistPath}`) {
+        await syncLocalQueue(updatedList)
+      }
+      handleCloseMusicAddModal()
+    }
+
+    const handleMusicMenuClick = async(item: { name: string, action: string } | null) => {
+      const musicInfo = rightClickMusicInfo.value
+      isShowMusicMenu.value = false
+      if (!item || !musicInfo) return
+      switch (item.action) {
+        case 'play':
+          await playLocalMusic(musicInfo)
+          break
+        case 'addTo':
+          selectedAddMusicInfo.value = musicInfo
+          isMusicAddVisible.value = true
+          break
+        case 'remove': {
+          const playlistPath = localMusic.state.value.currentPlaylist
+          if (!playlistPath) return
+          if (!await dialog.confirm(`确认从当前播放列表中移除「${musicInfo.name}」？`)) return
+          const updatedList = await localMusic.removeMusicFromPlaylist(playlistPath, musicInfo)
+          if (updatedList && playMusicInfo.listId === LOCAL_MUSIC_QUEUE_ID && activeLocalQueueKey.value === `playlist:${playlistPath}`) {
+            await syncLocalQueue(updatedList)
+          }
+          break
+        }
       }
     }
 
@@ -302,11 +461,18 @@ export default {
       if (!playlistPath) return
       const newPath = await localMusic.renamePlaylist(playlistPath, playlistEditorName.value)
       if (!newPath) return
+      if (activeLocalQueueKey.value === `playlist:${playlistPath}`) {
+        activeLocalQueueKey.value = `playlist:${newPath}`
+      }
       handleClosePlaylistEditor()
     }
 
     watch(isShowPlaylistMenu, val => {
       if (!val) rightClickPlaylistPath.value = ''
+    })
+
+    watch(isShowMusicMenu, val => {
+      if (!val) rightClickMusicInfo.value = null
     })
 
     watch(isPlaylistEditorVisible, val => {
@@ -316,13 +482,6 @@ export default {
         playlistEditorInputRef.value?.select()
       })
     })
-
-    const handlePlayMusic = (musicInfo: LX.Music.MusicInfo) => {
-      const localListId = 'local_music_temp'
-      setPlayListId(localListId)
-      setPlayMusicInfo(localListId, musicInfo, false)
-      setMusicUrl(musicInfo)
-    }
 
     onMounted(() => {
       document.addEventListener('mousedown', handleClickOutside)
@@ -351,6 +510,14 @@ export default {
       rightClickPlaylistPath,
       handlePlaylistContextMenu,
       handlePlaylistMenuClick,
+      isQueueAllFilesActive,
+      isQueuePlaylistActive,
+      musicMenuLocation,
+      isShowMusicMenu,
+      musicMenus,
+      rightClickMusicId,
+      handleMusicContextMenu,
+      handleMusicMenuClick,
       isPlaylistEditorVisible,
       playlistEditorTitle,
       playlistEditorPlaceholder,
@@ -360,6 +527,11 @@ export default {
       handleStartCreatePlaylist,
       handleClosePlaylistEditor,
       handleConfirmPlaylistEditor,
+      isMusicAddVisible,
+      musicAddTitle,
+      selectedAddMusicInfo,
+      handleCloseMusicAddModal,
+      handleAddMusicToPlaylist,
       handlePlayMusic,
     }
   },
@@ -570,6 +742,24 @@ export default {
   word-break: break-all;
 }
 
+.queueActive {
+  border-left: 2px solid var(--color-primary);
+}
+
+.queueTag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 4px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--color-primary-background-hover);
+  color: var(--color-primary);
+  font-size: 10px;
+  line-height: 1;
+  vertical-align: middle;
+}
+
 .playlistCount {
   flex: 0 0 auto;
   color: var(--color-font-label);
@@ -636,9 +826,18 @@ export default {
   flex: auto;
   display: flex;
   flex-flow: column nowrap;
+
+  :global(.list-item) {
+    height: 40px;
+    flex: none;
+
+    &.active {
+      color: var(--color-button-font);
+    }
+  }
 }
 
-.listContent {
+.content {
   min-height: 0;
   font-size: 14px;
   display: flex;
@@ -651,8 +850,8 @@ export default {
   display: flex;
   height: 40px;
   align-items: center;
-  padding: 0 10px;
-  cursor: pointer;
+  box-sizing: border-box;
+  font-size: 12px;
   &:hover {
     background: var(--color-primary-background-hover);
   }
@@ -660,6 +859,10 @@ export default {
   &.active {
     background: var(--color-primary-background);
   }
+}
+
+.clicked {
+  background: var(--color-primary-background-hover);
 }
 
 .num {
@@ -725,5 +928,59 @@ export default {
 
 .playlistEditorPrimaryBtn {
   background: var(--color-primary-background-hover);
+}
+
+.musicAddModal {
+  display: flex;
+  flex-flow: column nowrap;
+  justify-content: center;
+  min-height: 0;
+
+  h2 {
+    font-size: 13px;
+    color: var(--color-font);
+    line-height: 1.3;
+    text-align: center;
+    padding: 15px;
+  }
+}
+
+.musicAddName {
+  color: var(--color-primary);
+}
+
+.musicAddBtnContent {
+  flex: auto;
+  max-height: 100%;
+  padding: 0 15px 15px;
+  display: flex;
+  flex-flow: row wrap;
+  justify-content: space-evenly;
+}
+
+.musicAddBtn {
+  box-sizing: border-box;
+  margin-left: 15px;
+  margin-bottom: 15px;
+  min-width: 160px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: @form-radius;
+  border: 1px solid var(--color-primary-background);
+  background: var(--color-background);
+  color: var(--color-font);
+  cursor: pointer;
+  width: calc((100% / 3) - 15px);
+  .mixin-ellipsis-1();
+
+  &:hover {
+    background: var(--color-primary-background-hover);
+  }
+}
+
+.musicAddEmpty {
+  padding: 0 15px 15px;
+  text-align: center;
+  color: var(--color-font-label);
 }
 </style>

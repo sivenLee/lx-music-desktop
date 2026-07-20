@@ -10,6 +10,8 @@ import {
   localMusicCreatePlaylist,
   localMusicRenamePlaylist,
   localMusicDeletePlaylist,
+  localMusicAddMusicToPlaylist,
+  localMusicRemoveMusicFromPlaylist,
   showSelectDialog,
 } from '@renderer/utils/ipc'
 import path from 'node:path'
@@ -25,6 +27,7 @@ export interface LocalMusicState {
   currentPlaylist: string | null
   searchText: string
   isLoading: boolean
+  isInited: boolean
 }
 
 const createInitialState = (): LocalMusicState => ({
@@ -37,10 +40,10 @@ const createInitialState = (): LocalMusicState => ({
   currentPlaylist: null,
   searchText: '',
   isLoading: false,
+  isInited: false,
 })
 
 const state = ref<LocalMusicState>(createInitialState())
-let hasInited = false
 
 export function useLocalMusic() {
   const filteredMusicFiles = computed(() => {
@@ -63,7 +66,7 @@ export function useLocalMusic() {
   }
 
   const init = async() => {
-    if (hasInited) return
+    if (state.value.isInited || state.value.isLoading) return
     state.value.isLoading = true
     try {
       const [directories, viewState] = await Promise.all([
@@ -80,7 +83,7 @@ export function useLocalMusic() {
       } else {
         await saveViewState()
       }
-      hasInited = true
+      state.value.isInited = true
     } catch (err) {
       console.error('Failed to init local music:', err)
     } finally {
@@ -245,9 +248,9 @@ export function useLocalMusic() {
       })
       state.value.playlistFiles = state.value.playlistFiles.map(p => p === playlistPath ? newPath : p)
       const oldCount = state.value.playlistCounts[playlistPath] ?? 0
-      delete state.value.playlistCounts[playlistPath]
+      const { [playlistPath]: _removedCount, ...restCounts } = state.value.playlistCounts
       state.value.playlistCounts = {
-        ...state.value.playlistCounts,
+        ...restCounts,
         [newPath]: oldCount,
       }
       if (state.value.currentPlaylist === playlistPath) state.value.currentPlaylist = newPath
@@ -264,8 +267,8 @@ export function useLocalMusic() {
     try {
       await localMusicDeletePlaylist(playlistPath)
       state.value.playlistFiles = state.value.playlistFiles.filter(p => p !== playlistPath)
-      delete state.value.playlistCounts[playlistPath]
-      state.value.playlistCounts = { ...state.value.playlistCounts }
+      const { [playlistPath]: _removedCount, ...restCounts } = state.value.playlistCounts
+      state.value.playlistCounts = { ...restCounts }
       if (state.value.currentPlaylist === playlistPath) {
         state.value.currentPlaylist = null
         state.value.musicFiles = state.value.allMusicFiles
@@ -274,6 +277,48 @@ export function useLocalMusic() {
     } catch (err) {
       console.error('Failed to delete playlist:', err)
       await dialog('删除播放列表失败')
+    }
+  }
+
+  const getPlaylistMusicFiles = async(playlistPath: string) => {
+    return localMusicParsePlaylist(playlistPath)
+  }
+
+  const refreshPlaylistAfterMutation = async(playlistPath: string) => {
+    const musicFiles = await getPlaylistMusicFiles(playlistPath)
+    state.value.playlistCounts = {
+      ...state.value.playlistCounts,
+      [playlistPath]: musicFiles.length,
+    }
+    if (state.value.currentPlaylist === playlistPath) state.value.musicFiles = musicFiles
+    return musicFiles
+  }
+
+  const addMusicToPlaylist = async(playlistPath: string, musicInfo: LX.Music.MusicInfoLocal) => {
+    try {
+      await localMusicAddMusicToPlaylist({
+        playlistPath,
+        musicFilePaths: [musicInfo.meta.filePath],
+      })
+      return await refreshPlaylistAfterMutation(playlistPath)
+    } catch (err) {
+      console.error('Failed to add music to playlist:', err)
+      await dialog('添加到播放列表失败')
+      return null
+    }
+  }
+
+  const removeMusicFromPlaylist = async(playlistPath: string, musicInfo: LX.Music.MusicInfoLocal) => {
+    try {
+      await localMusicRemoveMusicFromPlaylist({
+        playlistPath,
+        musicFilePaths: [musicInfo.meta.filePath],
+      })
+      return await refreshPlaylistAfterMutation(playlistPath)
+    } catch (err) {
+      console.error('Failed to remove music from playlist:', err)
+      await dialog('移出播放列表失败')
+      return null
     }
   }
 
@@ -291,5 +336,8 @@ export function useLocalMusic() {
     selectPlaylist,
     showAllFiles,
     getPlaylistName,
+    getPlaylistMusicFiles,
+    addMusicToPlaylist,
+    removeMusicFromPlaylist,
   }
 }

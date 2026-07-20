@@ -20,6 +20,8 @@ const modules = {
     create_playlist: 'local_music_create_playlist',
     rename_playlist: 'local_music_rename_playlist',
     delete_playlist: 'local_music_delete_playlist',
+    add_music_to_playlist: 'local_music_add_music_to_playlist',
+    remove_music_from_playlist: 'local_music_remove_music_from_playlist',
   },
   player: {
     invoke_play_music: 'play_music',

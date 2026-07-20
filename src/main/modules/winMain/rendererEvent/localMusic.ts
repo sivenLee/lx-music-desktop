@@ -43,6 +43,25 @@ const getPlaylistFilePath = (dirPath: string, name: string) => {
   return resolvedFile
 }
 
+const normalizePlaylistMusicFilePaths = (playlistPath: string, musicFilePaths: string[]) => {
+  const pathSet = new Set<string>()
+  const result: string[] = []
+  const playlistDirPath = path.dirname(playlistPath)
+  for (const filePath of musicFilePaths) {
+    const resolvedPath = path.resolve(filePath)
+    if (pathSet.has(resolvedPath)) continue
+    pathSet.add(resolvedPath)
+    const relativePath = path.relative(playlistDirPath, resolvedPath)
+    result.push(relativePath.split(path.sep).join('/'))
+  }
+  return result
+}
+
+const writePlaylistMusicFilePaths = async(playlistPath: string, musicFilePaths: string[]) => {
+  const lines = ['#EXTM3U', ...normalizePlaylistMusicFilePaths(playlistPath, musicFilePaths)]
+  await fs.promises.writeFile(playlistPath, `${lines.join('\n')}\n`, { encoding: 'utf8' })
+}
+
 const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfoLocal | null> => {
   if (!await checkPath(filePath)) return null
   const { parseFile } = await import('music-metadata')
@@ -90,7 +109,7 @@ export default () => {
     return getViewState(store)
   })
 
-  mainHandle<LX.LocalMusic.LocalMusicViewState, void>(LOCAL_MUSIC_EVENT_NAME.set_state, async({ params }) => {
+  mainHandle<LX.LocalMusic.LocalMusicViewState>(LOCAL_MUSIC_EVENT_NAME.set_state, async({ params }) => {
     const store = getStore(LOCAL_MUSIC_STORE_NAME)
     setViewState(store, params)
   })
@@ -116,7 +135,7 @@ export default () => {
   })
 
   // 删除目录
-  mainHandle<string, void>(LOCAL_MUSIC_EVENT_NAME.remove_directory, async({ params: dirId }) => {
+  mainHandle<string>(LOCAL_MUSIC_EVENT_NAME.remove_directory, async({ params: dirId }) => {
     const store = getStore(LOCAL_MUSIC_STORE_NAME)
     let directories = store.get<LX.LocalMusic.LocalMusicDirectory[]>('directories') ?? []
     directories = directories.filter(d => d.id !== dirId)
@@ -195,7 +214,7 @@ export default () => {
     return newPath
   })
 
-  mainHandle<string, void>(LOCAL_MUSIC_EVENT_NAME.delete_playlist, async({ params: playlistPath }) => {
+  mainHandle<string>(LOCAL_MUSIC_EVENT_NAME.delete_playlist, async({ params: playlistPath }) => {
     const store = getStore(LOCAL_MUSIC_STORE_NAME)
     if (!await checkPath(playlistPath)) return
     await fs.promises.unlink(playlistPath)
@@ -206,5 +225,30 @@ export default () => {
         currentPlaylistPath: null,
       })
     }
+  })
+
+  mainHandle<{
+    playlistPath: string
+    musicFilePaths: string[]
+  }>(LOCAL_MUSIC_EVENT_NAME.add_music_to_playlist, async({ params }) => {
+    if (!await checkPath(params.playlistPath)) throw new Error('Playlist not exists')
+    const currentMusicFilePaths = await parseM3UPlaylist(params.playlistPath)
+    await writePlaylistMusicFilePaths(params.playlistPath, [
+      ...currentMusicFilePaths,
+      ...params.musicFilePaths,
+    ])
+  })
+
+  mainHandle<{
+    playlistPath: string
+    musicFilePaths: string[]
+  }>(LOCAL_MUSIC_EVENT_NAME.remove_music_from_playlist, async({ params }) => {
+    if (!await checkPath(params.playlistPath)) throw new Error('Playlist not exists')
+    const removePathSet = new Set(params.musicFilePaths.map(filePath => path.resolve(filePath)))
+    const currentMusicFilePaths = await parseM3UPlaylist(params.playlistPath)
+    await writePlaylistMusicFilePaths(
+      params.playlistPath,
+      currentMusicFilePaths.filter(filePath => !removePathSet.has(path.resolve(filePath))),
+    )
   })
 }
