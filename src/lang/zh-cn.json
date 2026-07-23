@@ -201,6 +201,7 @@
   "local_music": "本地音乐",
   "local_music_all_files": "所有文件",
   "local_music_playlists": "播放列表",
+  "local_music_search_expression_placeholder": "搜索表达式，如 A||B&&C||!D",
   "no_item": "列表竟然是空的...",
   "not_agree": "不接受",
   "ok": "我知道了",

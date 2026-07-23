@@ -46,16 +46,128 @@ const createInitialState = (): LocalMusicState => ({
 const state = ref<LocalMusicState>(createInitialState())
 
 export function useLocalMusic() {
+  const matchSearchKeyword = (keyword: string, searchFields: string[]) => {
+    const text = keyword.trim().toLowerCase()
+    if (!text) return true
+    return searchFields.some(field => field.includes(text))
+  }
+
+  const tokenizeSearchExpression = (expression: string) => {
+    const tokens: string[] = []
+    let current = ''
+
+    for (let i = 0; i < expression.length; i++) {
+      const char = expression[i]
+      const nextChar = expression[i + 1]
+      if (char === '&' && nextChar === '&') {
+        if (current.trim()) tokens.push(current.trim())
+        tokens.push('&&')
+        current = ''
+        i++
+        continue
+      }
+      if (char === '|' && nextChar === '|') {
+        if (current.trim()) tokens.push(current.trim())
+        tokens.push('||')
+        current = ''
+        i++
+        continue
+      }
+      if (char === '!' || char === '(' || char === ')') {
+        if (current.trim()) tokens.push(current.trim())
+        tokens.push(char)
+        current = ''
+        continue
+      }
+      current += char
+    }
+
+    if (current.trim()) tokens.push(current.trim())
+    return tokens
+  }
+
+  const matchSearchExpression = (expression: string, searchFields: string[]) => {
+    const text = expression.trim()
+    if (!text) return true
+
+    const tokens = tokenizeSearchExpression(text)
+    let index = 0
+
+    const parsePrimary = (): boolean | null => {
+      const token = tokens[index]
+      if (!token) return null
+      if (token === '(') {
+        index++
+        const value = parseOr()
+        if (value == null || tokens[index] !== ')') return null
+        index++
+        return value
+      }
+      if (token === ')' || token === '&&' || token === '||' || token === '!') return null
+      index++
+      return matchSearchKeyword(token, searchFields)
+    }
+
+    const parseUnary = (): boolean | null => {
+      const token = tokens[index]
+      if (token === '!') {
+        index++
+        const value = parseUnary()
+        return value == null ? null : !value
+      }
+      return parsePrimary()
+    }
+
+    const parseAnd = (): boolean | null => {
+      let value = parseUnary()
+      if (value == null) return null
+      while (tokens[index] === '&&') {
+        index++
+        const rightValue = parseUnary()
+        if (rightValue == null) return null
+        value = value && rightValue
+      }
+      return value
+    }
+
+    const parseOr = (): boolean | null => {
+      let value = parseAnd()
+      if (value == null) return null
+      while (tokens[index] === '||') {
+        index++
+        const rightValue = parseAnd()
+        if (rightValue == null) return null
+        value = value || rightValue
+      }
+      return value
+    }
+
+    const result = parseOr()
+    if (result == null || index < tokens.length) {
+      return matchSearchKeyword(text, searchFields)
+    }
+    return result
+  }
+
+  const getSearchFields = (file: LX.Music.MusicInfoLocal) => {
+    return [
+      path.basename(file.meta.filePath),
+      file.name,
+      file.singer,
+      file.meta.albumName,
+    ].map(text => (text ?? '').toLowerCase())
+  }
+
   const filteredMusicFiles = computed(() => {
-    if (!state.value.searchText.trim()) {
+    const expression = state.value.searchText.trim()
+    if (!expression) {
       return state.value.musicFiles
     }
-    const searchText = state.value.searchText.toLowerCase()
-    return state.value.musicFiles.filter(
-      (file) =>
-        file.name.toLowerCase().includes(searchText) ||
-        file.singer.toLowerCase().includes(searchText),
-    )
+
+    return state.value.musicFiles.filter(file => {
+      const searchFields = getSearchFields(file)
+      return matchSearchExpression(expression, searchFields)
+    })
   })
 
   const saveViewState = async() => {

@@ -58,12 +58,26 @@
           刷新
         </button>
       </div>
-      <input
-        v-model="localMusicState.searchText"
-        :class="$style.searchInput"
-        type="text"
-        :placeholder="$t('search')"
-      />
+    </div>
+    <div :class="$style.header">
+      <div :class="$style.searchInputWrap">
+        <input
+          v-model="searchInputText"
+          :class="$style.searchInput"
+          type="text"
+          :placeholder="$t('local_music_search_expression_placeholder')"
+          @blur="handleSearchBlur"
+        />
+        <button
+          v-if="searchInputText"
+          type="button"
+          :class="$style.searchClearBtn"
+          title="清空"
+          @click="handleClearSearch"
+        >
+          ×
+        </button>
+      </div>
     </div>
     <div :class="$style.main">
       <div :class="$style.sidebar">
@@ -73,13 +87,12 @@
             :class="[
               $style.playlistItem,
               { [$style.active]: !localMusicState.currentPlaylist },
-              { [$style.queueActive]: isQueueAllFilesActive },
             ]"
             @click="showAllFiles"
           >
             <span :class="$style.playlistName">
               {{ $t('local_music_all_files') }}
-              <span v-if="isQueueAllFilesActive" :class="$style.queueTag">播放中</span>
+              <span v-if="isQueueAllFilesActive" :class="$style.queueTag"></span>
             </span>
             <span :class="$style.playlistCount">{{ localMusicState.allMusicFiles.length }}</span>
           </li>
@@ -90,14 +103,13 @@
               $style.playlistItem,
               { [$style.active]: localMusicState.currentPlaylist === playlist },
               { [$style.clicked]: rightClickPlaylistPath === playlist },
-              { [$style.queueActive]: isQueuePlaylistActive(playlist) },
             ]"
             @click="selectPlaylist(playlist)"
             @contextmenu.prevent="handlePlaylistContextMenu($event, playlist)"
           >
             <span :class="$style.playlistName">
               {{ getPlaylistName(playlist) }}
-              <span v-if="isQueuePlaylistActive(playlist)" :class="$style.queueTag">播放中</span>
+              <span v-if="isQueuePlaylistActive(playlist)" :class="$style.queueTag"></span>
             </span>
             <span :class="$style.playlistCount">{{ localMusicState.playlistCounts[playlist] ?? 0 }}</span>
           </li>
@@ -220,6 +232,7 @@
 
 <script lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick, toRaw } from '@common/utils/vueTools'
+import { debounce } from '@common/utils'
 import { useI18n } from '@renderer/plugins/i18n'
 import { useLocalMusic } from './useLocalMusic'
 import { overwriteListMusics, clearListMusics } from '@renderer/store/list/action'
@@ -237,6 +250,7 @@ export default {
     const localMusic = useLocalMusic()
     const directorySelectorRef = ref<HTMLElement | null>(null)
     const isDirectoryPopoverVisible = ref(false)
+    const searchInputText = ref(localMusic.state.value.searchText)
 
     const selectedDirectory = computed(() => localMusic.state.value.currentDirectory)
     const currentDirectoryPath = computed(() => selectedDirectory.value?.path ?? '')
@@ -270,6 +284,21 @@ export default {
 
     const handleRefreshDirectory = () => {
       void localMusic.refreshDirectory()
+    }
+
+    const syncSearchText = () => {
+      localMusic.state.value.searchText = searchInputText.value.trim()
+    }
+
+    const applySearchText = debounce(syncSearchText, 500)
+
+    const handleSearchBlur = () => {
+      applySearchText()
+    }
+
+    const handleClearSearch = () => {
+      searchInputText.value = ''
+      syncSearchText()
     }
 
     const handleClickOutside = (event: MouseEvent) => {
@@ -363,11 +392,25 @@ export default {
     }
     const isQueuePlaylistActive = (playlistPath: string) => currentQueueKey.value === `playlist:${playlistPath}`
     const isQueueAllFilesActive = computed(() => currentQueueKey.value === getLocalQueueKey(null))
+    const getCurrentLocalQueue = () => {
+      // Search results are only for display; playback always uses the current raw playlist queue.
+      return localMusic.state.value.musicFiles
+    }
+
+    const normalizeLocalQueue = (musicFiles: LX.Music.MusicInfoLocal[]) => {
+      const addedIds = new Set<string>()
+      return musicFiles.filter(musicInfo => {
+        if (addedIds.has(musicInfo.id)) return false
+        addedIds.add(musicInfo.id)
+        return true
+      })
+    }
 
     const syncLocalQueue = async(musicFiles: LX.Music.MusicInfoLocal[]) => {
+      const queueMusicFiles = normalizeLocalQueue(musicFiles)
       await overwriteListMusics({
         listId: LOCAL_MUSIC_QUEUE_ID,
-        musicInfos: musicFiles.map(musicInfo => {
+        musicInfos: queueMusicFiles.map(musicInfo => {
           const rawMusicInfo = toRaw(musicInfo)
           return {
             ...rawMusicInfo,
@@ -378,7 +421,7 @@ export default {
     }
 
     const playLocalMusic = async(musicInfo: LX.Music.MusicInfoLocal) => {
-      const queue = localMusic.state.value.musicFiles
+      const queue = getCurrentLocalQueue()
       if (!queue.length) return
       activeLocalQueueKey.value = getLocalQueueKey()
       await syncLocalQueue(queue)
@@ -471,6 +514,10 @@ export default {
       if (!val) rightClickPlaylistPath.value = ''
     })
 
+    watch(() => localMusic.state.value.searchText, (searchText) => {
+      if (searchInputText.value !== searchText) searchInputText.value = searchText
+    }, { immediate: true })
+
     watch(isShowMusicMenu, val => {
       if (!val) rightClickMusicInfo.value = null
     })
@@ -500,10 +547,13 @@ export default {
       selectedDirectory,
       currentDirectoryPath,
       currentPlayingMusicId,
+      searchInputText,
+      handleClearSearch,
       handleToggleDirectoryPopover,
       handleSelectDirectory,
       handleRemoveDirectory,
       handleRefreshDirectory,
+      handleSearchBlur,
       playlistMenuLocation,
       isShowPlaylistMenu,
       playlistMenus,
@@ -549,7 +599,6 @@ export default {
 
 .header {
   position: relative;
-  z-index: 20;
   display: flex;
   padding: 10px;
   align-items: center;
@@ -679,12 +728,45 @@ export default {
 }
 
 .searchInput {
-  flex: 1;
+  width: 100%;
   padding: 5px 10px;
+  padding-right: 28px;
   border-radius: 4px;
   border: 1px solid var(--color-primary-background);
   background: var(--color-background);
   color: var(--color-font);
+  outline: none;
+  box-sizing: border-box;
+
+  &:focus,
+  &:hover {
+    border-color: var(--color-primary) !important;
+  }
+}
+
+.searchInputWrap {
+  position: relative;
+  flex: 1;
+}
+
+.searchClearBtn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-font-label);
+  font-size: 14px;
+  line-height: 16px;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--color-font);
+  }
 }
 
 .main {
@@ -694,7 +776,9 @@ export default {
 }
 
 .sidebar {
-  width: 200px;
+  width: 15%;
+  min-width: 200px;
+  flex: 0 0 15%;
   border-right: 1px solid var(--color-primary-alpha-900);
   display: flex;
   flex-direction: column;
@@ -742,21 +826,14 @@ export default {
   word-break: break-all;
 }
 
-.queueActive {
-  border-left: 2px solid var(--color-primary);
-}
-
 .queueTag {
   display: inline-flex;
   align-items: center;
   margin-left: 6px;
-  padding: 0 4px;
-  height: 16px;
-  border-radius: 8px;
-  background: var(--color-primary-background-hover);
-  color: var(--color-primary);
-  font-size: 10px;
-  line-height: 1;
+  height: 8px;
+  width: 8px;
+  border-radius: 4px;
+  background: var(--color-primary);
   vertical-align: middle;
 }
 
@@ -789,6 +866,7 @@ export default {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 
 .loading {

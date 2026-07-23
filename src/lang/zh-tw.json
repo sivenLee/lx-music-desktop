@@ -201,6 +201,7 @@
   "local_music": "本地音樂",
   "local_music_all_files": "所有檔案",
   "local_music_playlists": "播放清單",
+  "local_music_search_expression_placeholder": "搜尋表達式，例如 A||B&&C||!D",
   "no_item": "清單竟然是空的...",
   "not_agree": "不接受",
   "ok": "我知道了",

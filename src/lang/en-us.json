@@ -201,6 +201,7 @@
   "local_music": "Local Music",
   "local_music_all_files": "All Files",
   "local_music_playlists": "Playlists",
+  "local_music_search_expression_placeholder": "Search expression, e.g. A||B&&C||!D",
   "no_item": "Nothing's here...",
   "not_agree": "Decline",
   "ok": "OK",
