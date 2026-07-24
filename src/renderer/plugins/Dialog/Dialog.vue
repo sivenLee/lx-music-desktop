@@ -29,8 +29,8 @@ export default {
 
     const defaultBtnTexts = computed(() => {
       return {
-        confirm: t('confirm_button_text'),
-        cancel: t('cancel_button_text'),
+        confirm: t('btn_confirm'),
+        cancel: t('btn_cancel'),
       }
     })
 

@@ -58,6 +58,32 @@
           刷新
         </button>
       </div>
+      <div :class="$style.buttonGroup">
+        <button
+          :class="$style.button"
+          :disabled="!selectedMusicCount"
+          title="清空选择"
+          @click="handleClearSelectedMusics"
+        >
+          已选{{ selectedMusicCount }}个
+        </button>
+        <button
+          :class="$style.button"
+          :disabled="!canAddSelectedMusics"
+          title="添加到…"
+          @click="handleShowSelectedMusicAddModal"
+        >
+          添加到…
+        </button>
+        <button
+          :class="$style.button"
+          :disabled="!canRemoveSelectedMusics"
+          title="移出列表"
+          @click="handleRemoveSelectedMusics"
+        >
+          移出列表
+        </button>
+      </div>
     </div>
     <div :class="$style.header">
       <div :class="$style.searchInputWrap">
@@ -143,6 +169,14 @@
                     <th class="nobreak" style="width: 25%;">{{ $t('music_singer') }}</th>
                     <th class="nobreak" style="width: 28%;">{{ $t('music_album') }}</th>
                     <th class="nobreak" style="width: 10%;">{{ $t('music_time') }}</th>
+                    <th class="nobreak" style="width: 6%;">
+                      <input
+                        ref="selectAllCheckboxRef"
+                        type="checkbox"
+                        :checked="isAllVisibleMusicSelected"
+                        @change="handleToggleSelectAll"
+                      />
+                    </th>
                   </tr>
                 </thead>
               </table>
@@ -150,13 +184,15 @@
             <div :class="$style.content">
               <div
                 v-for="(item, index) in filteredMusicFiles"
-                :key="item.id"
+                :key="`${item.id}_${Number(index)}`"
                 :class="[
                   $style.listItem,
                   'list-item',
                   { [$style.active]: currentPlayingMusicId === item.id },
                   { [$style.clicked]: rightClickMusicId === item.id },
+                  { [$style.selected]: isMusicSelected(item) },
                 ]"
+                @click="handleToggleMusicSelection(item)"
                 @dblclick="handlePlayMusic(item)"
                 @contextmenu.prevent="handleMusicContextMenu($event, item)"
               >
@@ -181,6 +217,14 @@
                 </div>
                 <div class="list-item-cell" style="flex: 0 0 10%;">
                   <span class="no-select">{{ item.interval || '--/--' }}</span>
+                </div>
+                <div class="list-item-cell" :class="$style.checkboxCell" style="flex: 0 0 6%;">
+                  <input
+                    type="checkbox"
+                    :checked="isMusicSelected(item)"
+                    @click.stop="handleToggleMusicSelection(item)"
+                    @change="noop"
+                  />
                 </div>
               </div>
             </div>
@@ -249,8 +293,11 @@ export default {
     const t = useI18n()
     const localMusic = useLocalMusic()
     const directorySelectorRef = ref<HTMLElement | null>(null)
+    const selectAllCheckboxRef = ref<HTMLInputElement | null>(null)
     const isDirectoryPopoverVisible = ref(false)
     const searchInputText = ref(localMusic.state.value.searchText)
+    const selectedMusicPaths = ref<string[]>([])
+    const filteredMusicFiles = localMusic.filteredMusicFiles
 
     const selectedDirectory = computed(() => localMusic.state.value.currentDirectory)
     const currentDirectoryPath = computed(() => selectedDirectory.value?.path ?? '')
@@ -262,6 +309,23 @@ export default {
       if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return null
       if (currentQueueKey.value !== getLocalQueueKey()) return null
       return playMusicInfo.musicInfo?.id ?? null
+    })
+    const visibleMusicPaths = computed(() => filteredMusicFiles.value.map((musicInfo: LX.Music.MusicInfoLocal) => musicInfo.meta.filePath))
+    const selectedMusicCount = computed(() => selectedMusicPaths.value.length)
+    const selectedMusicInfos = computed(() => filteredMusicFiles.value.filter((musicInfo: LX.Music.MusicInfoLocal) => {
+      return selectedMusicPaths.value.includes(musicInfo.meta.filePath)
+    }))
+    const isAllVisibleMusicSelected = computed(() => {
+      return visibleMusicPaths.value.length > 0 && visibleMusicPaths.value.every((path: string) => selectedMusicPaths.value.includes(path))
+    })
+    const isPartVisibleMusicSelected = computed(() => {
+      return selectedMusicPaths.value.length > 0 && !isAllVisibleMusicSelected.value
+    })
+    const canAddSelectedMusics = computed(() => {
+      return selectedMusicCount.value > 0 && localMusic.state.value.playlistFiles.length > 0
+    })
+    const canRemoveSelectedMusics = computed(() => {
+      return selectedMusicCount.value > 0 && !!localMusic.state.value.currentPlaylist
     })
 
     const handleToggleDirectoryPopover = () => {
@@ -299,6 +363,34 @@ export default {
     const handleClearSearch = () => {
       searchInputText.value = ''
       syncSearchText()
+    }
+
+    const setSelectedMusicPaths = (paths: string[]) => {
+      selectedMusicPaths.value = [...new Set(paths)]
+    }
+
+    const isMusicSelected = (musicInfo: LX.Music.MusicInfoLocal) => {
+      return selectedMusicPaths.value.includes(musicInfo.meta.filePath)
+    }
+
+    const handleToggleMusicSelection = (musicInfo: LX.Music.MusicInfoLocal) => {
+      if (isMusicSelected(musicInfo)) {
+        setSelectedMusicPaths(selectedMusicPaths.value.filter(path => path !== musicInfo.meta.filePath))
+        return
+      }
+      setSelectedMusicPaths([...selectedMusicPaths.value, musicInfo.meta.filePath])
+    }
+
+    const handleToggleSelectAll = () => {
+      if (isAllVisibleMusicSelected.value) {
+        setSelectedMusicPaths([])
+        return
+      }
+      setSelectedMusicPaths(visibleMusicPaths.value)
+    }
+
+    const handleClearSelectedMusics = () => {
+      setSelectedMusicPaths([])
     }
 
     const handleClickOutside = (event: MouseEvent) => {
@@ -344,8 +436,8 @@ export default {
     const playlistEditorTitle = computed(() => playlistEditorMode.value === 'create' ? '新建播放列表' : '重命名播放列表')
     const playlistEditorPlaceholder = computed(() => playlistEditorMode.value === 'create' ? '请输入播放列表名称' : '请输入新的播放列表名称')
     const isMusicAddVisible = ref(false)
-    const selectedAddMusicInfo = ref<LX.Music.MusicInfoLocal | null>(null)
-    const musicAddTitle = computed(() => selectedAddMusicInfo.value ? '添加歌曲到' : '添加到')
+    const selectedAddMusicInfos = ref<LX.Music.MusicInfoLocal[]>([])
+    const musicAddTitle = computed(() => `添加${selectedAddMusicInfos.value.length}首歌曲到`)
 
     const handlePlaylistContextMenu = (event: MouseEvent, playlistPath: string) => {
       rightClickPlaylistPath.value = playlistPath
@@ -441,13 +533,12 @@ export default {
 
     const handleCloseMusicAddModal = () => {
       isMusicAddVisible.value = false
-      selectedAddMusicInfo.value = null
+      selectedAddMusicInfos.value = []
     }
 
     const handleAddMusicToPlaylist = async(playlistPath: string) => {
-      const musicInfo = selectedAddMusicInfo.value
-      if (!musicInfo) return
-      const updatedList = await localMusic.addMusicToPlaylist(playlistPath, musicInfo)
+      if (!selectedAddMusicInfos.value.length) return
+      const updatedList = await localMusic.addMusicsToPlaylist(playlistPath, selectedAddMusicInfos.value)
       if (!updatedList) return
       if (playMusicInfo.listId === LOCAL_MUSIC_QUEUE_ID && activeLocalQueueKey.value === `playlist:${playlistPath}`) {
         await syncLocalQueue(updatedList)
@@ -464,19 +555,37 @@ export default {
           await playLocalMusic(musicInfo)
           break
         case 'addTo':
-          selectedAddMusicInfo.value = musicInfo
+          selectedAddMusicInfos.value = [musicInfo]
           isMusicAddVisible.value = true
           break
         case 'remove': {
           const playlistPath = localMusic.state.value.currentPlaylist
           if (!playlistPath) return
           if (!await dialog.confirm(`确认从当前播放列表中移除「${musicInfo.name}」？`)) return
-          const updatedList = await localMusic.removeMusicFromPlaylist(playlistPath, musicInfo)
+          const updatedList = await localMusic.removeMusicsFromPlaylist(playlistPath, [musicInfo])
           if (updatedList && playMusicInfo.listId === LOCAL_MUSIC_QUEUE_ID && activeLocalQueueKey.value === `playlist:${playlistPath}`) {
             await syncLocalQueue(updatedList)
           }
           break
         }
+      }
+    }
+
+    const handleShowSelectedMusicAddModal = () => {
+      if (!canAddSelectedMusics.value) return
+      selectedAddMusicInfos.value = selectedMusicInfos.value
+      isMusicAddVisible.value = true
+    }
+
+    const handleRemoveSelectedMusics = async() => {
+      const playlistPath = localMusic.state.value.currentPlaylist
+      if (!playlistPath || !selectedMusicInfos.value.length) return
+      if (!await dialog.confirm(`确认从当前播放列表中移除已选的${selectedMusicInfos.value.length}首歌曲？`)) return
+      const updatedList = await localMusic.removeMusicsFromPlaylist(playlistPath, selectedMusicInfos.value)
+      if (!updatedList) return
+      handleClearSelectedMusics()
+      if (playMusicInfo.listId === LOCAL_MUSIC_QUEUE_ID && activeLocalQueueKey.value === `playlist:${playlistPath}`) {
+        await syncLocalQueue(updatedList)
       }
     }
 
@@ -518,9 +627,19 @@ export default {
       if (searchInputText.value !== searchText) searchInputText.value = searchText
     }, { immediate: true })
 
+    watch(visibleMusicPaths, (paths) => {
+      setSelectedMusicPaths(selectedMusicPaths.value.filter(path => paths.includes(path)))
+    }, { immediate: true })
+
     watch(isShowMusicMenu, val => {
       if (!val) rightClickMusicInfo.value = null
     })
+
+    watch([isAllVisibleMusicSelected, isPartVisibleMusicSelected], () => {
+      if (selectAllCheckboxRef.value) {
+        selectAllCheckboxRef.value.indeterminate = isPartVisibleMusicSelected.value
+      }
+    }, { immediate: true })
 
     watch(isPlaylistEditorVisible, val => {
       if (!val) return
@@ -543,12 +662,24 @@ export default {
       ...localMusic,
       localMusicState: localMusic.state,
       directorySelectorRef,
+      selectAllCheckboxRef,
       isDirectoryPopoverVisible,
       selectedDirectory,
       currentDirectoryPath,
       currentPlayingMusicId,
+      selectedMusicCount,
+      isAllVisibleMusicSelected,
+      canAddSelectedMusics,
+      canRemoveSelectedMusics,
       searchInputText,
       handleClearSearch,
+      handleToggleSelectAll,
+      handleToggleMusicSelection,
+      handleClearSelectedMusics,
+      handleShowSelectedMusicAddModal,
+      handleRemoveSelectedMusics,
+      isMusicSelected,
+      noop: () => {},
       handleToggleDirectoryPopover,
       handleSelectDirectory,
       handleRemoveDirectory,
@@ -579,7 +710,6 @@ export default {
       handleConfirmPlaylistEditor,
       isMusicAddVisible,
       musicAddTitle,
-      selectedAddMusicInfo,
       handleCloseMusicAddModal,
       handleAddMusicToPlaylist,
       handlePlayMusic,
@@ -725,6 +855,14 @@ export default {
     cursor: not-allowed;
     opacity: 0.6;
   }
+}
+
+.buttonGroup {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .searchInput {
@@ -937,6 +1075,10 @@ export default {
   &.active {
     background: var(--color-primary-background);
   }
+
+  &.selected {
+    background: var(--color-primary-background-hover);
+  }
 }
 
 .clicked {
@@ -962,6 +1104,16 @@ export default {
   justify-content: center;
   color: var(--color-button-font);
   opacity: .7;
+}
+
+.checkboxCell {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+
+  input[type="checkbox"] {
+    margin-left: 0px;
+  }
 }
 
 .playlistEditor {

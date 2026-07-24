@@ -406,11 +406,11 @@ export function useLocalMusic() {
     return musicFiles
   }
 
-  const addMusicToPlaylist = async(playlistPath: string, musicInfo: LX.Music.MusicInfoLocal) => {
+  const addMusicsToPlaylist = async(playlistPath: string, musicInfos: LX.Music.MusicInfoLocal[]) => {
     try {
       await localMusicAddMusicToPlaylist({
         playlistPath,
-        musicFilePaths: [musicInfo.meta.filePath],
+        musicFilePaths: [...new Set(musicInfos.map(musicInfo => musicInfo.meta.filePath))],
       })
       return await refreshPlaylistAfterMutation(playlistPath)
     } catch (err) {
@@ -420,11 +420,15 @@ export function useLocalMusic() {
     }
   }
 
-  const removeMusicFromPlaylist = async(playlistPath: string, musicInfo: LX.Music.MusicInfoLocal) => {
+  const addMusicToPlaylist = async(playlistPath: string, musicInfo: LX.Music.MusicInfoLocal) => {
+    return addMusicsToPlaylist(playlistPath, [musicInfo])
+  }
+
+  const removeMusicsFromPlaylist = async(playlistPath: string, musicInfos: LX.Music.MusicInfoLocal[]) => {
     try {
       await localMusicRemoveMusicFromPlaylist({
         playlistPath,
-        musicFilePaths: [musicInfo.meta.filePath],
+        musicFilePaths: [...new Set(musicInfos.map(musicInfo => musicInfo.meta.filePath))],
       })
       return await refreshPlaylistAfterMutation(playlistPath)
     } catch (err) {
@@ -432,6 +436,10 @@ export function useLocalMusic() {
       await dialog('移出播放列表失败')
       return null
     }
+  }
+
+  const removeMusicFromPlaylist = async(playlistPath: string, musicInfo: LX.Music.MusicInfoLocal) => {
+    return removeMusicsFromPlaylist(playlistPath, [musicInfo])
   }
 
   return {
@@ -449,7 +457,9 @@ export function useLocalMusic() {
     showAllFiles,
     getPlaylistName,
     getPlaylistMusicFiles,
+    addMusicsToPlaylist,
     addMusicToPlaylist,
+    removeMusicsFromPlaylist,
     removeMusicFromPlaylist,
   }
 }
