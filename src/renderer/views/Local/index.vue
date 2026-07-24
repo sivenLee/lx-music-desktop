@@ -61,10 +61,15 @@
       <div :class="$style.buttonGroup">
         <button
           :class="$style.button"
-          :disabled="!selectedMusicCount"
-          title="清空选择"
-          @click="handleClearSelectedMusics"
+          title="多选开关"
+          @click="handleToggleMultiSelectMode"
         >
+          <input
+            type="checkbox"
+            :class="$style.buttonCheckbox"
+            :checked="isMultiSelectEnabled"
+            tabindex="-1"
+          />
           已选{{ selectedMusicCount }}个
         </button>
         <button
@@ -137,7 +142,15 @@
               {{ getPlaylistName(playlist) }}
               <span v-if="isQueuePlaylistActive(playlist)" :class="$style.queueTag"></span>
             </span>
-            <span :class="$style.playlistCount">{{ localMusicState.playlistCounts[playlist] ?? 0 }}</span>
+            <span :class="$style.playlistCount">
+              {{ localMusicState.playlistCounts[playlist] ?? 0 }}
+              <span
+                v-if="(localMusicState.playlistInvalidCounts[playlist] ?? 0) > 0"
+                :class="$style.playlistInvalidCount"
+              >
+                *{{ localMusicState.playlistInvalidCounts[playlist] ?? 0 }}
+              </span>
+            </span>
           </li>
           <li :class="$style.playlistCreateItem">
             <button
@@ -173,6 +186,7 @@
                       <input
                         ref="selectAllCheckboxRef"
                         type="checkbox"
+                        :disabled="!isMultiSelectEnabled"
                         :checked="isAllVisibleMusicSelected"
                         @change="handleToggleSelectAll"
                       />
@@ -221,6 +235,7 @@
                 <div class="list-item-cell" :class="$style.checkboxCell" style="flex: 0 0 6%;">
                   <input
                     type="checkbox"
+                    :disabled="!isMultiSelectEnabled"
                     :checked="isMusicSelected(item)"
                     @click.stop="handleToggleMusicSelection(item)"
                     @change="noop"
@@ -252,6 +267,52 @@
         </div>
       </div>
     </material-modal>
+    <material-modal :show="isPlaylistSourceEditorVisible" width="720px" max-width="86%" height="78%" @close="handleClosePlaylistSourceEditor">
+      <main :class="$style.playlistSourceEditor">
+        <div :class="$style.playlistSourceHeader">
+          <div :class="$style.playlistSourceTitle">编辑播放列表</div>
+          <div :class="$style.playlistSourcePath">{{ playlistSourcePath }}</div>
+        </div>
+        <div v-if="isPlaylistSourceLoading" :class="$style.playlistSourceLoading">
+          {{ $t('loading') }}...
+        </div>
+        <div v-else :class="$style.playlistSourceContent">
+          <div v-if="playlistSourceInvalidFiles.length" :class="$style.playlistSourceInvalid">
+            <div :class="$style.playlistSourceInvalidTitle">失效歌曲（{{ playlistSourceInvalidFiles.length }}）</div>
+            <div class="scroll" :class="$style.playlistSourceInvalidList">
+              <div v-for="(filePath, index) in playlistSourceInvalidFiles" :key="index" :class="$style.playlistSourceInvalidItem">
+                {{ filePath }}
+              </div>
+            </div>
+          </div>
+          <textarea
+            v-model="playlistSourceText"
+            class="scroll"
+            :class="$style.playlistSourceTextarea"
+            spellcheck="false"
+          />
+          <div v-if="playlistSourceError" :class="$style.playlistSourceError">{{ playlistSourceError }}</div>
+        </div>
+        <div :class="$style.playlistSourceActions">
+          <button
+            type="button"
+            :class="$style.playlistEditorBtn"
+            :disabled="isPlaylistSourceSaving"
+            @click="handleReloadPlaylistSource"
+          >
+            重载
+          </button>
+          <button
+            type="button"
+            :class="[$style.playlistEditorBtn, $style.playlistEditorPrimaryBtn]"
+            :disabled="isPlaylistSourceLoading || isPlaylistSourceSaving"
+            @click="handleSavePlaylistSource"
+          >
+            {{ isPlaylistSourceSaving ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </main>
+    </material-modal>
     <material-modal :show="isMusicAddVisible" max-width="70%" min-width="200px" @close="handleCloseMusicAddModal">
       <main :class="$style.musicAddModal">
         <h2>{{ musicAddTitle }}</h2>
@@ -271,6 +332,71 @@
         </div>
       </main>
     </material-modal>
+    <material-modal :show="isMusicDetailVisible" width="900px" max-width="86%" max-height="82%" @close="handleCloseMusicDetailModal">
+      <main :class="$style.musicDetailModal">
+        <h2 :class="$style.musicDetailTitle">{{ musicDetailTitle }}</h2>
+        <div v-if="isMusicDetailLoading" :class="$style.musicDetailLoading">
+          {{ $t('loading') }}...
+        </div>
+        <div v-else-if="musicDetailError" :class="$style.musicDetailEmpty">
+          {{ musicDetailError }}
+        </div>
+        <div v-else-if="musicDetailInfo" :class="$style.musicDetailBody">
+          <div class="scroll" :class="$style.musicDetailLeft">
+            <section :class="$style.musicDetailSection">
+              <div :class="$style.musicDetailSectionTitle">文件信息</div>
+              <div :class="$style.musicDetailRows">
+                <div v-for="(detail, index) in musicDetailInfo.fileInfo" :key="index" :class="$style.musicDetailRow">
+                  <div :class="$style.musicDetailRowLabel">{{ detail.label }}</div>
+                  <div :class="$style.musicDetailRowValue">{{ detail.value }}</div>
+                </div>
+              </div>
+            </section>
+
+            <section :class="$style.musicDetailSection">
+              <div :class="$style.musicDetailSectionTitle">元信息</div>
+              <div :class="$style.musicDetailRows">
+                <div v-for="(detail, index) in musicDetailInfo.metaInfo" :key="index" :class="$style.musicDetailRow">
+                  <div :class="$style.musicDetailRowLabel">{{ detail.label }}</div>
+                  <div :class="$style.musicDetailRowValue">{{ detail.value }}</div>
+                </div>
+              </div>
+            </section>
+
+            <section :class="$style.musicDetailSection">
+              <div :class="$style.musicDetailSectionTitle">音乐信息</div>
+              <div :class="$style.musicDetailRows">
+                <div v-for="(detail, index) in musicDetailInfo.audioInfo" :key="index" :class="$style.musicDetailRow">
+                  <div :class="$style.musicDetailRowLabel">{{ detail.label }}</div>
+                  <div :class="$style.musicDetailRowValue">{{ detail.value }}</div>
+                </div>
+              </div>
+            </section>
+
+            <section v-if="musicDetailInfo.customFields.length" :class="$style.musicDetailSection">
+              <div :class="$style.musicDetailSectionTitle">其他自定义字段</div>
+              <div :class="$style.musicDetailRows">
+                <div v-for="(detail, index) in musicDetailInfo.customFields" :key="index" :class="$style.musicDetailRow">
+                  <div :class="$style.musicDetailRowLabel">{{ detail.label }}</div>
+                  <div :class="$style.musicDetailRowValue">{{ detail.value }}</div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside :class="$style.musicDetailRight">
+            <div :class="$style.musicDetailCoverWrap">
+              <img v-if="musicDetailInfo.coverUrl" :src="musicDetailInfo.coverUrl" :class="$style.musicDetailCover" alt="专辑封面" />
+              <div v-else :class="$style.musicDetailCoverEmpty">无封面</div>
+            </div>
+            <div :class="$style.musicDetailLyricBlock">
+              <div :class="$style.musicDetailLyricTitle">歌词</div>
+              <pre :class="$style.musicDetailLyricPre">{{ musicDetailInfo.lyric || '暂无歌词' }}</pre>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </material-modal>
   </div>
 </template>
 
@@ -284,6 +410,7 @@ import { playListById, stop } from '@renderer/core/player'
 import { setPlayListId, setPlayMusicInfo } from '@renderer/store/player/action'
 import { playMusicInfo } from '@renderer/store/player/state'
 import { dialog } from '@renderer/plugins/Dialog'
+import { getLocalMusicDetailInfo, type LocalMusicDetailInfo } from '@renderer/utils/music'
 
 const LOCAL_MUSIC_QUEUE_ID = 'local_music_queue'
 
@@ -296,6 +423,7 @@ export default {
     const selectAllCheckboxRef = ref<HTMLInputElement | null>(null)
     const isDirectoryPopoverVisible = ref(false)
     const searchInputText = ref(localMusic.state.value.searchText)
+    const isMultiSelectEnabled = ref(false)
     const selectedMusicPaths = ref<string[]>([])
     const filteredMusicFiles = localMusic.filteredMusicFiles
 
@@ -365,6 +493,11 @@ export default {
       syncSearchText()
     }
 
+    const handleToggleMultiSelectMode = () => {
+      isMultiSelectEnabled.value = !isMultiSelectEnabled.value
+      if (!isMultiSelectEnabled.value) handleClearSelectedMusics()
+    }
+
     const setSelectedMusicPaths = (paths: string[]) => {
       selectedMusicPaths.value = [...new Set(paths)]
     }
@@ -374,6 +507,7 @@ export default {
     }
 
     const handleToggleMusicSelection = (musicInfo: LX.Music.MusicInfoLocal) => {
+      if (!isMultiSelectEnabled.value) return
       if (isMusicSelected(musicInfo)) {
         setSelectedMusicPaths(selectedMusicPaths.value.filter(path => path !== musicInfo.meta.filePath))
         return
@@ -382,6 +516,7 @@ export default {
     }
 
     const handleToggleSelectAll = () => {
+      if (!isMultiSelectEnabled.value) return
       if (isAllVisibleMusicSelected.value) {
         setSelectedMusicPaths([])
         return
@@ -411,6 +546,7 @@ export default {
     const activeLocalQueueKey = ref('')
 
     const playlistMenus = computed(() => [
+      { name: '编辑', action: 'edit' },
       { name: window.i18n.t('lists__rename'), action: 'rename' },
       { name: window.i18n.t('lists__remove'), action: 'remove' },
     ])
@@ -420,6 +556,10 @@ export default {
         name: t('list__add_to'),
         action: 'addTo',
         disabled: !localMusic.state.value.playlistFiles.length,
+      },
+      {
+        name: '歌曲详情',
+        action: 'detail',
       },
       {
         name: t('list__remove'),
@@ -435,9 +575,22 @@ export default {
     const playlistEditorInputRef = ref<HTMLInputElement | null>(null)
     const playlistEditorTitle = computed(() => playlistEditorMode.value === 'create' ? '新建播放列表' : '重命名播放列表')
     const playlistEditorPlaceholder = computed(() => playlistEditorMode.value === 'create' ? '请输入播放列表名称' : '请输入新的播放列表名称')
+    const isPlaylistSourceEditorVisible = ref(false)
+    const isPlaylistSourceLoading = ref(false)
+    const isPlaylistSourceSaving = ref(false)
+    const playlistSourcePath = ref('')
+    const playlistSourceText = ref('')
+    const playlistSourceInvalidFiles = ref<string[]>([])
+    const playlistSourceError = ref('')
     const isMusicAddVisible = ref(false)
     const selectedAddMusicInfos = ref<LX.Music.MusicInfoLocal[]>([])
     const musicAddTitle = computed(() => `添加${selectedAddMusicInfos.value.length}首歌曲到`)
+    const isMusicDetailVisible = ref(false)
+    const isMusicDetailLoading = ref(false)
+    const musicDetailInfo = ref<LocalMusicDetailInfo | null>(null)
+    const musicDetailError = ref('')
+    const musicDetailTargetName = ref('')
+    const musicDetailTitle = computed(() => musicDetailTargetName.value ? `歌曲详情 - ${musicDetailTargetName.value}` : '歌曲详情')
 
     const handlePlaylistContextMenu = (event: MouseEvent, playlistPath: string) => {
       rightClickPlaylistPath.value = playlistPath
@@ -456,12 +609,84 @@ export default {
       }
     }
 
+    const syncPlaylistQueueIfNeeded = async(playlistPath: string, musicFiles?: LX.Music.MusicInfoLocal[]) => {
+      if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return
+      if (activeLocalQueueKey.value !== `playlist:${playlistPath}`) return
+      await syncLocalQueue(musicFiles ?? await localMusic.getPlaylistMusicFiles(playlistPath))
+    }
+
+    const loadPlaylistSource = async(playlistPath = playlistSourcePath.value) => {
+      if (!playlistPath) return
+      isPlaylistSourceLoading.value = true
+      playlistSourceError.value = ''
+      try {
+        const [sourceText, detail] = await Promise.all([
+          localMusic.readPlaylistText(playlistPath),
+          localMusic.getPlaylistDetail(playlistPath),
+        ])
+        playlistSourceText.value = sourceText
+        playlistSourceInvalidFiles.value = detail.invalidFilePaths
+      } catch (err) {
+        console.error('Failed to read playlist source:', err)
+        playlistSourceError.value = `读取播放列表失败：${err instanceof Error ? err.message : '未知错误'}`
+      } finally {
+        isPlaylistSourceLoading.value = false
+      }
+    }
+
+    const handleOpenPlaylistSourceEditor = async(playlistPath: string) => {
+      playlistSourcePath.value = playlistPath
+      playlistSourceText.value = ''
+      playlistSourceError.value = ''
+      isPlaylistSourceEditorVisible.value = true
+      await loadPlaylistSource(playlistPath)
+    }
+
+    const handleClosePlaylistSourceEditor = () => {
+      isPlaylistSourceEditorVisible.value = false
+      isPlaylistSourceLoading.value = false
+      isPlaylistSourceSaving.value = false
+      playlistSourcePath.value = ''
+      playlistSourceText.value = ''
+      playlistSourceInvalidFiles.value = []
+      playlistSourceError.value = ''
+    }
+
+    const handleReloadPlaylistSource = async() => {
+      await loadPlaylistSource()
+    }
+
+    const handleSavePlaylistSource = async() => {
+      if (!playlistSourcePath.value) return
+      isPlaylistSourceSaving.value = true
+      playlistSourceError.value = ''
+      try {
+        const musicFiles = await localMusic.writePlaylistText(playlistSourcePath.value, playlistSourceText.value)
+        await syncPlaylistQueueIfNeeded(playlistSourcePath.value, musicFiles)
+        const [sourceText, detail] = await Promise.all([
+          localMusic.readPlaylistText(playlistSourcePath.value),
+          localMusic.getPlaylistDetail(playlistSourcePath.value),
+        ])
+        playlistSourceText.value = sourceText
+        playlistSourceInvalidFiles.value = detail.invalidFilePaths
+        handleClosePlaylistSourceEditor()
+      } catch (err) {
+        console.error('Failed to save playlist source:', err)
+        playlistSourceError.value = `保存播放列表失败：${err instanceof Error ? err.message : '未知错误'}`
+      } finally {
+        isPlaylistSourceSaving.value = false
+      }
+    }
+
     const handlePlaylistMenuClick = async(item: { name: string, action: string } | null) => {
       const playlistPath = rightClickPlaylistPath.value
       isShowPlaylistMenu.value = false
       if (!item) return
       if (!playlistPath) return
       switch (item.action) {
+        case 'edit':
+          await handleOpenPlaylistSourceEditor(playlistPath)
+          break
         case 'rename':
           playlistEditorMode.value = 'rename'
           isPlaylistEditorVisible.value = true
@@ -536,6 +761,35 @@ export default {
       selectedAddMusicInfos.value = []
     }
 
+    const handleCloseMusicDetailModal = () => {
+      isMusicDetailVisible.value = false
+      isMusicDetailLoading.value = false
+      musicDetailInfo.value = null
+      musicDetailError.value = ''
+      musicDetailTargetName.value = ''
+    }
+
+    const handleShowMusicDetail = async(musicInfo: LX.Music.MusicInfoLocal) => {
+      isMusicDetailVisible.value = true
+      isMusicDetailLoading.value = true
+      musicDetailInfo.value = null
+      musicDetailError.value = ''
+      musicDetailTargetName.value = musicInfo.name
+      try {
+        const detailInfo = await getLocalMusicDetailInfo(musicInfo.meta.filePath)
+        if (!detailInfo) {
+          musicDetailError.value = '暂未读取到歌曲详情'
+          return
+        }
+        musicDetailInfo.value = detailInfo
+      } catch (err) {
+        console.log(err)
+        musicDetailError.value = `读取歌曲详情失败：${err instanceof Error ? err.message : '未知错误'}`
+      } finally {
+        isMusicDetailLoading.value = false
+      }
+    }
+
     const handleAddMusicToPlaylist = async(playlistPath: string) => {
       if (!selectedAddMusicInfos.value.length) return
       const updatedList = await localMusic.addMusicsToPlaylist(playlistPath, selectedAddMusicInfos.value)
@@ -557,6 +811,9 @@ export default {
         case 'addTo':
           selectedAddMusicInfos.value = [musicInfo]
           isMusicAddVisible.value = true
+          break
+        case 'detail':
+          await handleShowMusicDetail(musicInfo)
           break
         case 'remove': {
           const playlistPath = localMusic.state.value.currentPlaylist
@@ -667,12 +924,14 @@ export default {
       selectedDirectory,
       currentDirectoryPath,
       currentPlayingMusicId,
+      isMultiSelectEnabled,
       selectedMusicCount,
       isAllVisibleMusicSelected,
       canAddSelectedMusics,
       canRemoveSelectedMusics,
       searchInputText,
       handleClearSearch,
+      handleToggleMultiSelectMode,
       handleToggleSelectAll,
       handleToggleMusicSelection,
       handleClearSelectedMusics,
@@ -691,6 +950,16 @@ export default {
       rightClickPlaylistPath,
       handlePlaylistContextMenu,
       handlePlaylistMenuClick,
+      isPlaylistSourceEditorVisible,
+      isPlaylistSourceLoading,
+      isPlaylistSourceSaving,
+      playlistSourcePath,
+      playlistSourceText,
+      playlistSourceInvalidFiles,
+      playlistSourceError,
+      handleClosePlaylistSourceEditor,
+      handleReloadPlaylistSource,
+      handleSavePlaylistSource,
       isQueueAllFilesActive,
       isQueuePlaylistActive,
       musicMenuLocation,
@@ -712,6 +981,12 @@ export default {
       musicAddTitle,
       handleCloseMusicAddModal,
       handleAddMusicToPlaylist,
+      isMusicDetailVisible,
+      isMusicDetailLoading,
+      musicDetailInfo,
+      musicDetailError,
+      musicDetailTitle,
+      handleCloseMusicDetailModal,
       handlePlayMusic,
     }
   },
@@ -750,7 +1025,7 @@ export default {
   border: 1px solid var(--color-primary-background);
   background: var(--color-background);
   color: var(--color-font);
-  min-width: 260px;
+  min-width: 360px;
   cursor: pointer;
   box-sizing: border-box;
   outline: none;
@@ -838,6 +1113,9 @@ export default {
 }
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 0px 10px;
   font-size: 12px;
   line-height: 26px;
@@ -863,6 +1141,11 @@ export default {
   justify-content: flex-end;
   gap: 10px;
   margin-left: auto;
+}
+
+.buttonCheckbox {
+  pointer-events: none;
+  margin: 0;
 }
 
 .searchInput {
@@ -979,6 +1262,11 @@ export default {
   flex: 0 0 auto;
   color: var(--color-font-label);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.playlistInvalidCount {
+  color: var(--color-danger, #f56c6c);
 }
 
 .playlistItem.clicked {
@@ -1160,6 +1448,107 @@ export default {
   background: var(--color-primary-background-hover);
 }
 
+.playlistSourceEditor {
+  display: flex;
+  flex-flow: column nowrap;
+  min-height: 0;
+  height: 100%;
+  padding: 18px 20px 20px;
+}
+
+.playlistSourceHeader {
+  margin-bottom: 12px;
+}
+
+.playlistSourceTitle {
+  font-size: 18px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.playlistSourcePath {
+  margin-top: 6px;
+  color: var(--color-font-label);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  word-break: break-all;
+}
+
+.playlistSourceLoading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-font-label);
+  font-size: 14px;
+}
+
+.playlistSourceContent {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-flow: column nowrap;
+}
+
+.playlistSourceInvalid {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-danger, #f56c6c);
+  border-radius: 6px;
+  background: var(--color-primary-background-hover);
+}
+
+.playlistSourceInvalidTitle {
+  margin-bottom: 8px;
+  color: var(--color-danger, #f56c6c);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.playlistSourceInvalidList {
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.playlistSourceInvalidItem {
+  padding: 3px 0;
+  color: var(--color-font);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.playlistSourceTextarea {
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-primary-alpha-900);
+  border-radius: 6px;
+  background: var(--color-primary-background-hover);
+  color: var(--color-font);
+  box-sizing: border-box;
+  outline: none;
+  resize: none;
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.playlistSourceError {
+  margin-top: 8px;
+  color: var(--color-danger, #f56c6c);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.playlistSourceActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .musicAddModal {
   display: flex;
   flex-flow: column nowrap;
@@ -1212,5 +1601,161 @@ export default {
   padding: 0 15px 15px;
   text-align: center;
   color: var(--color-font-label);
+}
+
+.musicDetailModal {
+  display: flex;
+  flex-flow: column nowrap;
+  min-height: 0;
+  padding: 18px 20px 20px;
+}
+
+.musicDetailTitle {
+  font-size: 18px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.musicDetailLoading,
+.musicDetailEmpty {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-font-label);
+  font-size: 14px;
+}
+
+.musicDetailContent {
+  margin-top: 12px;
+  min-height: 0;
+}
+
+.musicDetailBody {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+}
+
+.musicDetailLeft {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-flow: column nowrap;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.musicDetailRight {
+  flex: 0 0 280px;
+  min-width: 240px;
+  display: flex;
+  flex-flow: column nowrap;
+  gap: 10px;
+  min-height: 0;
+}
+
+.musicDetailSection {
+  padding: 10px 12px;
+  border: 1px solid var(--color-primary-alpha-900);
+  border-radius: 6px;
+  background: var(--color-background);
+}
+
+.musicDetailSectionTitle {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--color-font);
+}
+
+.musicDetailCoverWrap {
+  width: 100%;
+}
+
+.musicDetailCover,
+.musicDetailCoverEmpty {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  border: 1px solid var(--color-primary-alpha-900);
+  background: var(--color-primary-background-hover);
+}
+
+.musicDetailCover {
+  display: block;
+  object-fit: cover;
+}
+
+.musicDetailCoverEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-font-label);
+  font-size: 13px;
+}
+
+.musicDetailRows {
+  min-width: 0;
+}
+
+.musicDetailRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--color-primary-alpha-900);
+}
+
+.musicDetailRow:last-child {
+  border-bottom: 0;
+}
+
+.musicDetailRowLabel {
+  flex: 0 0 76px;
+  color: var(--color-font-label);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.musicDetailRowValue {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-font);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: right;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.musicDetailLyricBlock {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-flow: column nowrap;
+}
+
+.musicDetailLyricTitle {
+  margin-bottom: 6px;
+  color: var(--color-font-label);
+  font-size: 12px;
+}
+
+.musicDetailLyricPre {
+  margin: 0;
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 6px;
+  background: var(--color-primary-background-hover);
+  color: var(--color-font);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
 }
 </style>

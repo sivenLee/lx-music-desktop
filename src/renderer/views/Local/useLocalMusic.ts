@@ -7,11 +7,14 @@ import {
   localMusicRemoveDirectory,
   localMusicScanDirectory,
   localMusicParsePlaylist,
+  localMusicGetPlaylistDetail,
   localMusicCreatePlaylist,
   localMusicRenamePlaylist,
   localMusicDeletePlaylist,
   localMusicAddMusicToPlaylist,
   localMusicRemoveMusicFromPlaylist,
+  localMusicReadPlaylistText,
+  localMusicWritePlaylistText,
   showSelectDialog,
 } from '@renderer/utils/ipc'
 import path from 'node:path'
@@ -24,6 +27,7 @@ export interface LocalMusicState {
   musicFiles: LX.Music.MusicInfoLocal[]
   playlistFiles: string[]
   playlistCounts: Record<string, number>
+  playlistInvalidCounts: Record<string, number>
   currentPlaylist: string | null
   searchText: string
   isLoading: boolean
@@ -37,6 +41,7 @@ const createInitialState = (): LocalMusicState => ({
   musicFiles: [],
   playlistFiles: [],
   playlistCounts: {},
+  playlistInvalidCounts: {},
   currentPlaylist: null,
   searchText: '',
   isLoading: false,
@@ -227,16 +232,21 @@ export function useLocalMusic() {
   }
 
   const refreshPlaylistCounts = async(playlistPaths: string[]) => {
-    const counts = await Promise.all(playlistPaths.map(async playlistPath => {
+    const details = await Promise.all(playlistPaths.map(async playlistPath => {
       try {
-        const musicFiles = await localMusicParsePlaylist(playlistPath)
-        return [playlistPath, musicFiles.length] as const
+        const detail = await localMusicGetPlaylistDetail(playlistPath)
+        return [playlistPath, detail] as const
       } catch (err) {
         console.error('Failed to load playlist count:', err)
-        return [playlistPath, 0] as const
+        return [playlistPath, { validCount: 0, invalidCount: 0 }] as const
       }
     }))
-    state.value.playlistCounts = Object.fromEntries(counts)
+    state.value.playlistCounts = Object.fromEntries(details.map(([playlistPath, detail]) => {
+      return [playlistPath, detail.validCount]
+    }))
+    state.value.playlistInvalidCounts = Object.fromEntries(details.map(([playlistPath, detail]) => {
+      return [playlistPath, detail.invalidCount]
+    }))
   }
 
   const assertPlaylistName = (name: string) => {
@@ -271,6 +281,7 @@ export function useLocalMusic() {
         state.value.musicFiles = []
         state.value.playlistFiles = []
         state.value.playlistCounts = {}
+        state.value.playlistInvalidCounts = {}
         state.value.currentPlaylist = null
         await saveViewState()
       }
@@ -330,6 +341,10 @@ export function useLocalMusic() {
         ...state.value.playlistCounts,
         [playlistPath]: 0,
       }
+      state.value.playlistInvalidCounts = {
+        ...state.value.playlistInvalidCounts,
+        [playlistPath]: 0,
+      }
       return true
     } catch (err) {
       console.error('Failed to create playlist:', err)
@@ -360,10 +375,16 @@ export function useLocalMusic() {
       })
       state.value.playlistFiles = state.value.playlistFiles.map(p => p === playlistPath ? newPath : p)
       const oldCount = state.value.playlistCounts[playlistPath] ?? 0
+      const oldInvalidCount = state.value.playlistInvalidCounts[playlistPath] ?? 0
       const { [playlistPath]: _removedCount, ...restCounts } = state.value.playlistCounts
+      const { [playlistPath]: _removedInvalidCount, ...restInvalidCounts } = state.value.playlistInvalidCounts
       state.value.playlistCounts = {
         ...restCounts,
         [newPath]: oldCount,
+      }
+      state.value.playlistInvalidCounts = {
+        ...restInvalidCounts,
+        [newPath]: oldInvalidCount,
       }
       if (state.value.currentPlaylist === playlistPath) state.value.currentPlaylist = newPath
       await saveViewState()
@@ -380,7 +401,9 @@ export function useLocalMusic() {
       await localMusicDeletePlaylist(playlistPath)
       state.value.playlistFiles = state.value.playlistFiles.filter(p => p !== playlistPath)
       const { [playlistPath]: _removedCount, ...restCounts } = state.value.playlistCounts
+      const { [playlistPath]: _removedInvalidCount, ...restInvalidCounts } = state.value.playlistInvalidCounts
       state.value.playlistCounts = { ...restCounts }
+      state.value.playlistInvalidCounts = { ...restInvalidCounts }
       if (state.value.currentPlaylist === playlistPath) {
         state.value.currentPlaylist = null
         state.value.musicFiles = state.value.allMusicFiles
@@ -397,13 +420,36 @@ export function useLocalMusic() {
   }
 
   const refreshPlaylistAfterMutation = async(playlistPath: string) => {
-    const musicFiles = await getPlaylistMusicFiles(playlistPath)
+    const [musicFiles, detail] = await Promise.all([
+      getPlaylistMusicFiles(playlistPath),
+      localMusicGetPlaylistDetail(playlistPath),
+    ])
     state.value.playlistCounts = {
       ...state.value.playlistCounts,
-      [playlistPath]: musicFiles.length,
+      [playlistPath]: detail.validCount,
+    }
+    state.value.playlistInvalidCounts = {
+      ...state.value.playlistInvalidCounts,
+      [playlistPath]: detail.invalidCount,
     }
     if (state.value.currentPlaylist === playlistPath) state.value.musicFiles = musicFiles
     return musicFiles
+  }
+
+  const readPlaylistText = async(playlistPath: string) => {
+    return localMusicReadPlaylistText(playlistPath)
+  }
+
+  const writePlaylistText = async(playlistPath: string, content: string) => {
+    await localMusicWritePlaylistText({
+      playlistPath,
+      content,
+    })
+    return refreshPlaylistAfterMutation(playlistPath)
+  }
+
+  const getPlaylistDetail = async(playlistPath: string) => {
+    return localMusicGetPlaylistDetail(playlistPath)
   }
 
   const addMusicsToPlaylist = async(playlistPath: string, musicInfos: LX.Music.MusicInfoLocal[]) => {
@@ -457,6 +503,9 @@ export function useLocalMusic() {
     showAllFiles,
     getPlaylistName,
     getPlaylistMusicFiles,
+    getPlaylistDetail,
+    readPlaylistText,
+    writePlaylistText,
     addMusicsToPlaylist,
     addMusicToPlaylist,
     removeMusicsFromPlaylist,

@@ -888,6 +888,32 @@ export const localMusicParsePlaylist = async(playlistPath: string): Promise<LX.M
   return rendererInvoke<string, LX.Music.MusicInfoLocal[]>(LOCAL_MUSIC_EVENT_NAME.parse_playlist, playlistPath)
 }
 
+export const localMusicGetPlaylistDetail = async(playlistPath: string): Promise<{
+  validCount: number
+  invalidCount: number
+  invalidFilePaths: string[]
+}> => {
+  return rendererInvoke<string, {
+    validCount: number
+    invalidCount: number
+    invalidFilePaths: string[]
+  }>(LOCAL_MUSIC_EVENT_NAME.get_playlist_detail, playlistPath)
+}
+
+export const localMusicReadPlaylistText = async(playlistPath: string): Promise<string> => {
+  return rendererInvoke<string, string>(LOCAL_MUSIC_EVENT_NAME.read_playlist_text, playlistPath)
+}
+
+export const localMusicWritePlaylistText = async(params: {
+  playlistPath: string
+  content: string
+}): Promise<void> => {
+  return rendererInvoke<{
+    playlistPath: string
+    content: string
+  }>(LOCAL_MUSIC_EVENT_NAME.write_playlist_text, params)
+}
+
 export const localMusicCreatePlaylist = async(params: {
   dirPath: string
   name: string

@@ -1,5 +1,5 @@
 import { checkPath, joinPath, extname, basename, readFile, getFileStats } from '@common/utils/nodejs'
-import { formatPlayTime } from '@common/utils/common'
+import { formatPlayTime, sizeFormate, dateFormat, encodePath } from '@common/utils/common'
 import { decodeKrc } from '@common/utils/lyricUtils/kg'
 import { type IAudioMetadata } from 'music-metadata'
 
@@ -111,6 +111,129 @@ const getFileMetadata = async(path: string) => {
       return null
     }) : null
   })
+}
+
+export interface LocalMusicDetailField {
+  label: string
+  value: string
+}
+
+export interface LocalMusicDetailInfo {
+  fileInfo: LocalMusicDetailField[]
+  metaInfo: LocalMusicDetailField[]
+  audioInfo: LocalMusicDetailField[]
+  customFields: LocalMusicDetailField[]
+  coverUrl: string
+  lyric: string
+}
+
+const EMPTY_DETAIL_VALUE = '-'
+const detailCommonFieldNames = new Set([
+  'title',
+  'artists',
+  'artist',
+  'album',
+  'picture',
+  'year',
+  'genre',
+  'comment',
+  'lyrics',
+])
+
+const stringifyDetailValue = (value: unknown): string => {
+  if (value == null) return ''
+  if (typeof value == 'string') return value.trim()
+  if (typeof value == 'number') return Number.isFinite(value) ? `${value}` : ''
+  if (typeof value == 'boolean') return value ? '是' : '否'
+  if (Array.isArray(value)) {
+    return value.map(item => stringifyDetailValue(item)).filter(Boolean).join(' / ')
+  }
+  if (Buffer.isBuffer(value)) return `二进制数据 (${sizeFormate(value.length)})`
+  if (typeof value == 'object') {
+    if ('text' in value && typeof value.text == 'string') return value.text.trim()
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return ''
+    }
+  }
+  return String(value).trim()
+}
+
+const createDetailField = (label: string, value: unknown): LocalMusicDetailField => {
+  const text = stringifyDetailValue(value)
+  return {
+    label,
+    value: text || EMPTY_DETAIL_VALUE,
+  }
+}
+
+const getDetailCoverUrl = async(path: string) => {
+  const picture = await getLocalMusicFilePic(path)
+  if (!picture) return ''
+  if (typeof picture == 'string') return encodePath(picture)
+  return `data:${picture.format};base64,${Buffer.from(picture.data).toString('base64')}`
+}
+
+const getDetailCustomFields = (metadata: IAudioMetadata | null): LocalMusicDetailField[] => {
+  if (!metadata) return []
+  return Object.entries(metadata.common).map(([key, value]) => {
+    if (detailCommonFieldNames.has(key)) return null
+    const text = stringifyDetailValue(value)
+    if (!text) return null
+    return {
+      label: key,
+      value: text,
+    }
+  }).filter((item): item is LocalMusicDetailField => item != null)
+}
+
+export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDetailInfo | null> => {
+  if (!await checkPath(path)) return null
+
+  const [stats, metadata, lyricInfo, coverUrl] = await Promise.all([
+    getFileStats(path),
+    getFileMetadata(path),
+    getLocalMusicFileLyric(path),
+    getDetailCoverUrl(path),
+  ])
+  if (!stats) return null
+
+  const common = metadata?.common
+  const format = metadata?.format
+  const ext = extname(path).replace(/^\./, '')
+  const comment = common?.comment?.map(item => stringifyDetailValue(item)).filter(Boolean).join('\n')
+
+  return {
+    fileInfo: [
+      createDetailField('文件名称', basename(path)),
+      createDetailField('文件类型', ext ? ext.toUpperCase() : ''),
+      createDetailField('文件路径', path),
+      createDetailField('文件大小', `${sizeFormate(stats.size)} (${stats.size} B)`),
+      createDetailField('创建时间', dateFormat(stats.birthtimeMs)),
+      createDetailField('修改时间', dateFormat(stats.mtimeMs)),
+    ],
+    metaInfo: [
+      createDetailField('标题', common?.title ?? basename(path, extname(path))),
+      createDetailField('艺术家', common?.artists?.join('、') || common?.artist),
+      createDetailField('专辑名', common?.album),
+      createDetailField('时长', format?.duration ? formatPlayTime(format.duration) : ''),
+      createDetailField('年代', common?.year),
+      createDetailField('流派', common?.genre?.join(' / ')),
+      createDetailField('注释', comment),
+    ],
+    audioInfo: [
+      createDetailField('采样率', format?.sampleRate ? `${format.sampleRate} Hz` : ''),
+      createDetailField('声道数', format?.numberOfChannels),
+      createDetailField('比特率', format?.bitrate ? `${Math.round(format.bitrate / 1000)} kbps` : ''),
+      createDetailField('编码方式', format?.codec || format?.container),
+      createDetailField('标签类型', format?.tagTypes?.join(', ')),
+      createDetailField('位深', format?.bitsPerSample ? `${format.bitsPerSample} bit` : ''),
+    ],
+    customFields: getDetailCustomFields(metadata),
+    coverUrl,
+    lyric: lyricInfo?.lyric?.trim() ?? '',
+  }
 }
 /**
  * 获取歌曲文件封面图片

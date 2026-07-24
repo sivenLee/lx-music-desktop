@@ -74,9 +74,21 @@ export const scanDirectory = async(
 export const parseM3UPlaylist = async(
   playlistPath: string,
 ): Promise<string[]> => {
+  const result = await parseM3UPlaylistDetail(playlistPath)
+  return result.musicFilePaths
+}
+
+export const parseM3UPlaylistDetail = async(
+  playlistPath: string,
+): Promise<{
+  musicFilePaths: string[]
+  invalidCount: number
+  invalidFilePaths: string[]
+}> => {
   const content = await fs.promises.readFile(playlistPath, 'utf8')
   const lines = content.split(/\r?\n/).map(line => line.trim())
   const musicFilePaths: string[] = []
+  const invalidPathSet = new Set<string>()
 
   const dirPath = path.dirname(playlistPath)
   for (const line of lines) {
@@ -84,10 +96,15 @@ export const parseM3UPlaylist = async(
       const filePath = path.isAbsolute(line) ? line : path.join(dirPath, line)
       if (await checkPath(filePath) && isMusicFile(filePath)) {
         musicFilePaths.push(filePath)
+      } else {
+        invalidPathSet.add(filePath)
       }
     }
   }
 
-  return musicFilePaths
+  return {
+    musicFilePaths,
+    invalidCount: invalidPathSet.size,
+    invalidFilePaths: Array.from(invalidPathSet),
+  }
 }
-

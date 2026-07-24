@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import {
   scanDirectory,
   parseM3UPlaylist,
+  parseM3UPlaylistDetail,
   generateId,
 } from '@common/utils/localMusic'
 import path from 'node:path'
@@ -180,6 +181,32 @@ export default () => {
     }
 
     return musicInfos
+  })
+
+  mainHandle<string, {
+    validCount: number
+    invalidCount: number
+    invalidFilePaths: string[]
+  }>(LOCAL_MUSIC_EVENT_NAME.get_playlist_detail, async({ params: playlistPath }) => {
+    const { musicFilePaths, invalidCount, invalidFilePaths } = await parseM3UPlaylistDetail(playlistPath)
+    return {
+      validCount: musicFilePaths.length,
+      invalidCount,
+      invalidFilePaths,
+    }
+  })
+
+  mainHandle<string, string>(LOCAL_MUSIC_EVENT_NAME.read_playlist_text, async({ params: playlistPath }) => {
+    if (!await checkPath(playlistPath)) throw new Error('Playlist not exists')
+    return fs.promises.readFile(playlistPath, 'utf8')
+  })
+
+  mainHandle<{
+    playlistPath: string
+    content: string
+  }>(LOCAL_MUSIC_EVENT_NAME.write_playlist_text, async({ params }) => {
+    if (!await checkPath(params.playlistPath)) throw new Error('Playlist not exists')
+    await fs.promises.writeFile(params.playlistPath, params.content, { encoding: 'utf8' })
   })
 
   mainHandle<{
