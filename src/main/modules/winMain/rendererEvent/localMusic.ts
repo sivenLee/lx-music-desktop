@@ -79,8 +79,16 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   let name = (metadata.common.title || basename(filePath, ext)).trim()
   let singer = metadata.common.artists?.length ? metadata.common.artists.map(a => a.trim()).join('、') : ''
-  let interval = metadata.format.duration ? formatPlayTime(metadata.format.duration) : ''
+  let duration = metadata.format.duration ?? null
+  let interval = duration ? formatPlayTime(duration) : ''
   let albumName = metadata.common.album?.trim() ?? ''
+  let stats: fs.Stats | null = null
+  try {
+    stats = await fs.promises.stat(filePath)
+  } catch (err) {
+    console.log(err)
+  }
+  let comment = metadata.common.comment?.map(item => item.text?.trim() ?? '').filter(Boolean).join('\n') ?? ''
 
   return {
     id: filePath,
@@ -94,6 +102,20 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
       songId: filePath,
       picUrl: '',
       ext: ext.replace(/^\./, ''),
+      fileName: basename(filePath),
+      duration,
+      year: metadata.common.year ?? null,
+      genre: metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? '',
+      comment,
+      createTime: stats?.birthtimeMs ?? null,
+      modifyTime: stats?.mtimeMs ?? null,
+      fileSize: stats?.size ?? null,
+      sampleRate: metadata.format.sampleRate ?? null,
+      bitrate: metadata.format.bitrate ?? null,
+      channels: metadata.format.numberOfChannels ?? null,
+      codec: metadata.format.codec ?? metadata.format.container ?? '',
+      tagTypes: metadata.format.tagTypes ?? [],
+      bitsPerSample: metadata.format.bitsPerSample ?? null,
     },
   }
 }

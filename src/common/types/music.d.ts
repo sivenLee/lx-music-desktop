@@ -34,6 +34,20 @@ declare namespace LX {
     interface MusicInfoMeta_local extends MusicInfoMetaBase {
       filePath: string
       ext: string
+      fileName?: string
+      duration?: number | null
+      year?: number | null
+      genre?: string
+      comment?: string
+      createTime?: number | null
+      modifyTime?: number | null
+      fileSize?: number | null
+      sampleRate?: number | null
+      bitrate?: number | null
+      channels?: number | null
+      codec?: string
+      tagTypes?: string[]
+      bitsPerSample?: number | null
     }
 
 

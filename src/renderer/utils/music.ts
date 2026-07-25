@@ -76,8 +76,11 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   let name = (metadata.common.title || basename(path, ext)).trim()
   let singer = metadata.common.artists?.length ? metadata.common.artists.map(a => a.trim()).join('、') : ''
-  let interval = metadata.format.duration ? formatPlayTime(metadata.format.duration) : ''
+  let duration = metadata.format.duration ?? null
+  let interval = duration ? formatPlayTime(duration) : ''
   let albumName = metadata.common.album?.trim() ?? ''
+  let stats = await getFileStats(path)
+  let comment = metadata.common.comment?.map(item => item.text?.trim() ?? '').filter(Boolean).join('\n') ?? ''
 
   return {
     id: path,
@@ -91,6 +94,20 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
       songId: path,
       picUrl: '',
       ext: ext.replace(/^\./, ''),
+      fileName: basename(path),
+      duration,
+      year: metadata.common.year ?? null,
+      genre: metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? '',
+      comment,
+      createTime: stats?.birthtimeMs ?? null,
+      modifyTime: stats?.mtimeMs ?? null,
+      fileSize: stats?.size ?? null,
+      sampleRate: metadata.format.sampleRate ?? null,
+      bitrate: metadata.format.bitrate ?? null,
+      channels: metadata.format.numberOfChannels ?? null,
+      codec: metadata.format.codec ?? metadata.format.container ?? '',
+      tagTypes: metadata.format.tagTypes ?? [],
+      bitsPerSample: metadata.format.bitsPerSample ?? null,
     },
   }
 }
@@ -173,6 +190,10 @@ const getDetailCoverUrl = async(path: string) => {
   if (!picture) return ''
   if (typeof picture == 'string') return encodePath(picture)
   return `data:${picture.format};base64,${Buffer.from(picture.data).toString('base64')}`
+}
+
+export const getLocalMusicCoverUrl = async(path: string) => {
+  return getDetailCoverUrl(path)
 }
 
 const getDetailCustomFields = (metadata: IAudioMetadata | null): LocalMusicDetailField[] => {
