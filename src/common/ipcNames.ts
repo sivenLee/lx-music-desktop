@@ -16,6 +16,7 @@ const modules = {
     add_directory: 'local_music_add_directory',
     remove_directory: 'local_music_remove_directory',
     scan_directory: 'local_music_scan_directory',
+    save_directory_config: 'local_music_save_directory_config',
     parse_playlist: 'local_music_parse_playlist',
     get_playlist_detail: 'local_music_get_playlist_detail',
     read_playlist_text: 'local_music_read_playlist_text',

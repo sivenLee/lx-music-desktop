@@ -874,14 +874,42 @@ export const localMusicRemoveDirectory = async(dirId: string): Promise<void> => 
   return rendererInvoke<string>(LOCAL_MUSIC_EVENT_NAME.remove_directory, dirId)
 }
 
-export const localMusicScanDirectory = async(dirPath: string): Promise<{
+export const localMusicScanDirectory = async(params: {
+  dirPath: string
+  forceRefresh?: boolean
+}): Promise<{
   musicFiles: LX.Music.MusicInfoLocal[]
   playlistFiles: string[]
+  playlistDetails: Record<string, {
+    validCount: number
+    invalidCount: number
+    invalidFilePaths: string[]
+  }>
+  directoryConfig: LX.LocalMusic.LocalMusicDirectoryConfig
 }> => {
-  return rendererInvoke<string, {
+  return rendererInvoke<{
+    dirPath: string
+    forceRefresh?: boolean
+  }, {
     musicFiles: LX.Music.MusicInfoLocal[]
     playlistFiles: string[]
-  }>(LOCAL_MUSIC_EVENT_NAME.scan_directory, dirPath)
+    playlistDetails: Record<string, {
+      validCount: number
+      invalidCount: number
+      invalidFilePaths: string[]
+    }>
+    directoryConfig: LX.LocalMusic.LocalMusicDirectoryConfig
+  }>(LOCAL_MUSIC_EVENT_NAME.scan_directory, params)
+}
+
+export const localMusicSaveDirectoryConfig = async(params: {
+  dirPath: string
+  config: LX.LocalMusic.LocalMusicDirectoryConfig
+}): Promise<LX.LocalMusic.LocalMusicDirectoryConfig> => {
+  return rendererInvoke<{
+    dirPath: string
+    config: LX.LocalMusic.LocalMusicDirectoryConfig
+  }, LX.LocalMusic.LocalMusicDirectoryConfig>(LOCAL_MUSIC_EVENT_NAME.save_directory_config, params)
 }
 
 export const localMusicParsePlaylist = async(playlistPath: string): Promise<LX.Music.MusicInfoLocal[]> => {

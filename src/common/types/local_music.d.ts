@@ -32,5 +32,14 @@ declare namespace LX {
       currentDirectoryId: string | null
       currentPlaylistPath: string | null
     }
+
+    interface LocalMusicDirectoryConfig {
+      currentPlaylistPath: string | null
+      selectedColumnKeys: string[]
+      sortState: {
+        key: string | null
+        order: 'asc' | 'desc'
+      }
+    }
   }
 }

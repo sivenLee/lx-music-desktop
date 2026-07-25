@@ -6,6 +6,7 @@ import {
   localMusicAddDirectory,
   localMusicRemoveDirectory,
   localMusicScanDirectory,
+  localMusicSaveDirectoryConfig,
   localMusicParsePlaylist,
   localMusicGetPlaylistDetail,
   localMusicCreatePlaylist,
@@ -23,6 +24,7 @@ import { dialog } from '@renderer/plugins/Dialog'
 export interface LocalMusicState {
   directories: LX.LocalMusic.LocalMusicDirectory[]
   currentDirectory: LX.LocalMusic.LocalMusicDirectory | null
+  directoryConfig: LX.LocalMusic.LocalMusicDirectoryConfig
   allMusicFiles: LX.Music.MusicInfoLocal[]
   musicFiles: LX.Music.MusicInfoLocal[]
   playlistFiles: string[]
@@ -37,6 +39,14 @@ export interface LocalMusicState {
 const createInitialState = (): LocalMusicState => ({
   directories: [],
   currentDirectory: null,
+  directoryConfig: {
+    currentPlaylistPath: null,
+    selectedColumnKeys: [],
+    sortState: {
+      key: null,
+      order: 'asc',
+    },
+  },
   allMusicFiles: [],
   musicFiles: [],
   playlistFiles: [],
@@ -182,6 +192,47 @@ export function useLocalMusic() {
     })
   }
 
+  const saveDirectoryConfig = async(config: LX.LocalMusic.LocalMusicDirectoryConfig) => {
+    if (!state.value.currentDirectory) return config
+    const plainConfig: LX.LocalMusic.LocalMusicDirectoryConfig = {
+      currentPlaylistPath: config.currentPlaylistPath ?? null,
+      selectedColumnKeys: [...config.selectedColumnKeys],
+      sortState: {
+        key: config.sortState.key ?? null,
+        order: config.sortState.order === 'desc' ? 'desc' : 'asc',
+      },
+    }
+    const savedConfig = await localMusicSaveDirectoryConfig({
+      dirPath: state.value.currentDirectory.path,
+      config: plainConfig,
+    })
+    state.value.directoryConfig = savedConfig
+    return savedConfig
+  }
+
+  const updateDirectoryConfig = async(patch: Partial<LX.LocalMusic.LocalMusicDirectoryConfig>) => {
+    return saveDirectoryConfig({
+      ...state.value.directoryConfig,
+      ...patch,
+      sortState: {
+        ...state.value.directoryConfig.sortState,
+        ...patch.sortState,
+      },
+    })
+  }
+
+  const applyPlaylistDetails = (playlistDetails: Record<string, {
+    validCount: number
+    invalidCount: number
+  }>) => {
+    state.value.playlistCounts = Object.fromEntries(Object.entries(playlistDetails).map(([playlistPath, detail]) => {
+      return [playlistPath, detail.validCount]
+    }))
+    state.value.playlistInvalidCounts = Object.fromEntries(Object.entries(playlistDetails).map(([playlistPath, detail]) => {
+      return [playlistPath, detail.invalidCount]
+    }))
+  }
+
   const init = async() => {
     if (state.value.isInited || state.value.isLoading) return
     state.value.isLoading = true
@@ -194,7 +245,7 @@ export function useLocalMusic() {
       if (directories.length > 0) {
         const targetDirectory = directories.find(dir => dir.id === viewState.currentDirectoryId) ?? directories[0]
         await selectDirectory(targetDirectory)
-        if (viewState.currentPlaylistPath && state.value.playlistFiles.includes(viewState.currentPlaylistPath)) {
+        if (!state.value.currentPlaylist && viewState.currentPlaylistPath && state.value.playlistFiles.includes(viewState.currentPlaylistPath)) {
           await selectPlaylist(viewState.currentPlaylistPath)
         }
       } else {
@@ -208,16 +259,25 @@ export function useLocalMusic() {
     }
   }
 
-  const selectDirectory = async(directory: LX.LocalMusic.LocalMusicDirectory) => {
+  const selectDirectory = async(directory: LX.LocalMusic.LocalMusicDirectory, forceRefresh = false) => {
     state.value.currentDirectory = directory
     state.value.currentPlaylist = null
     state.value.isLoading = true
     try {
-      const result = await localMusicScanDirectory(directory.path)
+      const result = await localMusicScanDirectory({
+        dirPath: directory.path,
+        forceRefresh,
+      })
       state.value.allMusicFiles = result.musicFiles
-      state.value.musicFiles = result.musicFiles
       state.value.playlistFiles = result.playlistFiles
-      await refreshPlaylistCounts(result.playlistFiles)
+      state.value.directoryConfig = result.directoryConfig
+      applyPlaylistDetails(result.playlistDetails)
+      if (result.directoryConfig.currentPlaylistPath && result.playlistFiles.includes(result.directoryConfig.currentPlaylistPath)) {
+        state.value.currentPlaylist = result.directoryConfig.currentPlaylistPath
+        state.value.musicFiles = await localMusicParsePlaylist(result.directoryConfig.currentPlaylistPath)
+      } else {
+        state.value.musicFiles = result.musicFiles
+      }
       await saveViewState()
     } catch (err) {
       console.error('Failed to scan directory:', err)
@@ -228,25 +288,7 @@ export function useLocalMusic() {
 
   const refreshDirectory = async() => {
     if (!state.value.currentDirectory) return
-    await selectDirectory(state.value.currentDirectory)
-  }
-
-  const refreshPlaylistCounts = async(playlistPaths: string[]) => {
-    const details = await Promise.all(playlistPaths.map(async playlistPath => {
-      try {
-        const detail = await localMusicGetPlaylistDetail(playlistPath)
-        return [playlistPath, detail] as const
-      } catch (err) {
-        console.error('Failed to load playlist count:', err)
-        return [playlistPath, { validCount: 0, invalidCount: 0 }] as const
-      }
-    }))
-    state.value.playlistCounts = Object.fromEntries(details.map(([playlistPath, detail]) => {
-      return [playlistPath, detail.validCount]
-    }))
-    state.value.playlistInvalidCounts = Object.fromEntries(details.map(([playlistPath, detail]) => {
-      return [playlistPath, detail.invalidCount]
-    }))
+    await selectDirectory(state.value.currentDirectory, true)
   }
 
   const assertPlaylistName = (name: string) => {
@@ -277,6 +319,7 @@ export function useLocalMusic() {
         await selectDirectory(state.value.directories[0])
       } else {
         state.value.currentDirectory = null
+        state.value.directoryConfig = createInitialState().directoryConfig
         state.value.allMusicFiles = []
         state.value.musicFiles = []
         state.value.playlistFiles = []
@@ -294,6 +337,9 @@ export function useLocalMusic() {
     try {
       const musicFiles = await localMusicParsePlaylist(playlistPath)
       state.value.musicFiles = musicFiles
+      await updateDirectoryConfig({
+        currentPlaylistPath: playlistPath,
+      })
       await saveViewState()
     } catch (err) {
       console.error('Failed to parse playlist:', err)
@@ -306,6 +352,9 @@ export function useLocalMusic() {
     if (state.value.currentDirectory) {
       state.value.currentPlaylist = null
       state.value.musicFiles = state.value.allMusicFiles
+      await updateDirectoryConfig({
+        currentPlaylistPath: null,
+      })
       await saveViewState()
     }
   }
@@ -386,7 +435,12 @@ export function useLocalMusic() {
         ...restInvalidCounts,
         [newPath]: oldInvalidCount,
       }
-      if (state.value.currentPlaylist === playlistPath) state.value.currentPlaylist = newPath
+      if (state.value.currentPlaylist === playlistPath) {
+        state.value.currentPlaylist = newPath
+        await updateDirectoryConfig({
+          currentPlaylistPath: newPath,
+        })
+      }
       await saveViewState()
       return newPath
     } catch (err) {
@@ -407,6 +461,9 @@ export function useLocalMusic() {
       if (state.value.currentPlaylist === playlistPath) {
         state.value.currentPlaylist = null
         state.value.musicFiles = state.value.allMusicFiles
+        await updateDirectoryConfig({
+          currentPlaylistPath: null,
+        })
         await saveViewState()
       }
     } catch (err) {
@@ -491,6 +548,8 @@ export function useLocalMusic() {
   return {
     state,
     filteredMusicFiles,
+    saveDirectoryConfig,
+    updateDirectoryConfig,
     init,
     selectDirectory,
     refreshDirectory,

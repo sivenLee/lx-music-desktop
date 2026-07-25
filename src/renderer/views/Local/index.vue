@@ -173,56 +173,55 @@
             <p>{{ $t('no_item') }}</p>
           </div>
           <div v-else :class="[$style.list, 'list']">
-            <div ref="musicTableRef" class="scroll" :class="$style.tableScroll">
-              <table :class="$style.musicTable">
-                <thead @contextmenu.prevent="handleMusicHeaderContextMenu">
-                  <tr>
-                    <th
-                      v-for="column in visibleColumns"
-                      :key="column.key"
-                      :class="[
-                        $style.tableHeaderCell,
-                        { [$style.stickyLeft]: column.fixed === 'left' },
-                        { [$style.stickyRight]: column.fixed === 'right' },
-                        { [$style.alignCenter]: column.align === 'center' },
-                        { [$style.alignRight]: column.align === 'right' },
-                        { [$style.sortableHeader]: column.sortable },
-                      ]"
-                      :style="getColumnStyle(column)"
-                      @click="handleToggleColumnSort(column)"
-                    >
-                      <template v-if="column.key === 'select'">
-                        <input
-                          ref="selectAllCheckboxRef"
-                          type="checkbox"
-                          :disabled="!isMultiSelectEnabled"
-                          :checked="isAllVisibleMusicSelected"
-                          @click.stop
-                          @change="handleToggleSelectAll"
-                        />
-                      </template>
-                      <template v-else>
-                        <span>{{ column.label }}</span>
-                        <span v-if="column.sortable" :class="$style.sortIcon">{{ getColumnSortMark(column.key) }}</span>
-                      </template>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(item, index) in sortedMusicFiles"
-                    :key="`${item.id}_${Number(index)}`"
+            <div ref="musicTableRef" class="scroll" :class="$style.tableScroll" @scroll="handleMusicTableScroll">
+              <div :class="$style.musicTable" :style="musicTableStyle">
+                <div :class="$style.tableHeaderRow" @contextmenu.prevent="handleMusicHeaderContextMenu">
+                  <div
+                    v-for="column in visibleColumns"
+                    :key="column.key"
+                    :class="[
+                      $style.tableHeaderCell,
+                      { [$style.stickyLeft]: column.fixed === 'left' },
+                      { [$style.stickyRight]: column.fixed === 'right' },
+                      { [$style.alignCenter]: column.align === 'center' },
+                      { [$style.alignRight]: column.align === 'right' },
+                      { [$style.sortableHeader]: column.sortable },
+                    ]"
+                    :style="getColumnStyle(column)"
+                    @click="handleToggleColumnSort(column)"
+                  >
+                    <template v-if="column.key === 'select'">
+                      <input
+                        ref="selectAllCheckboxRef"
+                        type="checkbox"
+                        :disabled="!isMultiSelectEnabled"
+                        :checked="isAllVisibleMusicSelected"
+                        @click.stop
+                        @change="handleToggleSelectAll"
+                      />
+                    </template>
+                    <template v-else>
+                      <span>{{ column.label }}</span>
+                      <span v-if="column.sortable" :class="$style.sortIcon">{{ getColumnSortMark(column.key) }}</span>
+                    </template>
+                  </div>
+                </div>
+                <div :class="$style.tableBody" :style="{ height: virtualBodyHeight }">
+                  <div
+                    v-for="row in virtualRows"
+                    :key="`${row.item.id}_${row.index}`"
                     :class="[
                       $style.tableRow,
-                      { [$style.active]: currentPlayingMusicId === item.id },
-                      { [$style.clicked]: rightClickMusicId === item.id },
-                      { [$style.selected]: isMusicSelected(item) },
+                      { [$style.active]: currentPlayingMusicId === row.item.id },
+                      { [$style.clicked]: rightClickMusicId === row.item.id },
+                      { [$style.selected]: isMusicSelected(row.item) },
                     ]"
-                    @click="handleToggleMusicSelection(item)"
-                    @dblclick="handlePlayMusic(item)"
-                    @contextmenu.prevent="handleMusicContextMenu($event, item)"
+                    :style="{ top: `${row.top}px` }"
+                    @click="handleToggleMusicSelection(row.item)"
+                    @dblclick="handlePlayMusic(row.item)"
+                    @contextmenu.prevent="handleMusicContextMenu($event, row.item)"
                   >
-                    <td
+                    <div
                       v-for="column in visibleColumns"
                       :key="column.key"
                       :class="[
@@ -237,25 +236,25 @@
                       <template v-if="column.key === 'index'">
                         <div :class="$style.indexCell">
                           <transition name="play-active">
-                            <div v-if="currentPlayingMusicId === item.id" :class="$style.playIcon">
+                            <div v-if="currentPlayingMusicId === row.item.id" :class="$style.playIcon">
                               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="50%" viewBox="0 0 512 512" space="preserve">
                                 <use xlink:href="#icon-play-outline" />
                               </svg>
                             </div>
-                            <div v-else>{{ Number(index) + 1 }}</div>
+                            <div v-else>{{ row.index + 1 }}</div>
                           </transition>
                         </div>
                       </template>
                       <template v-else-if="column.key === 'cover'">
-                        <music-cover-cell :file-path="item.meta.filePath" :alt="item.name" />
+                        <music-cover-cell :file-path="row.item.meta.filePath" :alt="row.item.name" />
                       </template>
                       <template v-else-if="column.key === 'select'">
                         <div :class="$style.checkboxCell">
                           <input
                             type="checkbox"
                             :disabled="!isMultiSelectEnabled"
-                            :checked="isMusicSelected(item)"
-                            @click.stop="handleToggleMusicSelection(item)"
+                            :checked="isMusicSelected(row.item)"
+                            @click.stop="handleToggleMusicSelection(row.item)"
                             @change="noop"
                           />
                         </div>
@@ -263,15 +262,15 @@
                       <template v-else>
                         <span
                           :class="$style.cellText"
-                          :title="column.key === 'fileName' ? (item.meta.fileName || item.name) : getMusicColumnText(item, column.key)"
+                          :title="column.key === 'fileName' ? (row.item.meta.fileName || row.item.name) : getMusicColumnText(row.item, column.key)"
                         >
-                          {{ getMusicColumnText(item, column.key) }}
+                          {{ getMusicColumnText(row.item, column.key) }}
                         </span>
                       </template>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -466,6 +465,9 @@ import MusicCoverCell from './components/MusicCoverCell.vue'
 
 const LOCAL_MUSIC_QUEUE_ID = 'local_music_queue'
 const EMPTY_CELL_VALUE = '-'
+const LOCAL_MUSIC_HEADER_HEIGHT = 38
+const LOCAL_MUSIC_ROW_HEIGHT = 40
+const LOCAL_MUSIC_OVERSCAN = 8
 
 type LocalMusicColumnKey =
   | 'index'
@@ -505,7 +507,7 @@ interface LocalMusicColumnDefinition {
 }
 
 const LOCAL_MUSIC_COLUMNS: LocalMusicColumnDefinition[] = [
-  { key: 'index', label: '#', width: 56, align: 'center', defaultVisible: true },
+  { key: 'index', label: '#', width: 56, align: 'center', defaultVisible: true, fixed: 'left' },
   { key: 'cover', label: '', fixed: 'left', width: 56, align: 'center' },
   { key: 'fileName', label: '文件名', fixed: 'left', width: 220, sortable: true },
   { key: 'filePath', label: '文件路径', width: 500, sortable: true },
@@ -530,7 +532,7 @@ const LOCAL_MUSIC_COLUMNS: LocalMusicColumnDefinition[] = [
   { key: 'select', label: '', width: 56, fixed: 'right', align: 'center' },
 ]
 
-const DEFAULT_VISIBLE_COLUMN_KEYS = LOCAL_MUSIC_COLUMNS.filter(column => column.defaultVisible).map(column => column.key)
+const DEFAULT_VISIBLE_COLUMN_KEYS = LOCAL_MUSIC_COLUMNS.filter(column => column.defaultVisible && !column.fixed).map(column => column.key)
 
 export default {
   name: 'LocalMusic',
@@ -544,6 +546,7 @@ export default {
     const musicTableRef = ref<HTMLElement | null>(null)
     const musicColumnMenuRef = ref<HTMLElement | null>(null)
     const selectAllCheckboxRef = ref<HTMLInputElement | null>(null)
+    const isApplyingDirectoryConfig = ref(false)
     const isDirectoryPopoverVisible = ref(false)
     const searchInputText = ref(localMusic.state.value.searchText)
     const isMultiSelectEnabled = ref(false)
@@ -558,6 +561,8 @@ export default {
       key: null,
       order: 'asc',
     })
+    const musicTableScrollTop = ref(0)
+    const musicTableViewportHeight = ref(0)
     const filteredMusicFiles = localMusic.filteredMusicFiles
     const selectableColumns = computed(() => LOCAL_MUSIC_COLUMNS.filter(column => !column.fixed))
     const visibleColumns = computed(() => {
@@ -566,6 +571,65 @@ export default {
         return column.fixed != null || selectedMusicColumnKeys.value.includes(column.key)
       })
     })
+    const totalColumnWidth = computed(() => visibleColumns.value.reduce((total, column) => total + column.width, 0))
+    const visibleRange = computed(() => {
+      const bodyScrollTop = Math.max(musicTableScrollTop.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
+      const viewportHeight = Math.max(musicTableViewportHeight.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
+      const start = Math.max(Math.floor(bodyScrollTop / LOCAL_MUSIC_ROW_HEIGHT) - LOCAL_MUSIC_OVERSCAN, 0)
+      const end = Math.min(
+        sortedMusicFiles.value.length,
+        Math.ceil((bodyScrollTop + viewportHeight) / LOCAL_MUSIC_ROW_HEIGHT) + LOCAL_MUSIC_OVERSCAN,
+      )
+      return { start, end }
+    })
+    const virtualRows = computed(() => {
+      const { start, end } = visibleRange.value
+      return sortedMusicFiles.value.slice(start, end).map((item, offset) => {
+        const index = start + offset
+        return {
+          item,
+          index,
+          top: index * LOCAL_MUSIC_ROW_HEIGHT,
+        }
+      })
+    })
+    const virtualBodyHeight = computed(() => `${sortedMusicFiles.value.length * LOCAL_MUSIC_ROW_HEIGHT}px`)
+    const musicTableStyle = computed(() => ({
+      width: `${totalColumnWidth.value}px`,
+      minWidth: '100%',
+    }))
+
+    const normalizeSelectedColumnKeys = (columnKeys: string[] | null | undefined) => {
+      const allowedColumnKeys = new Set(selectableColumns.value.map(column => column.key))
+      const normalized = (columnKeys ?? []).filter((key): key is LocalMusicColumnKey => {
+        return allowedColumnKeys.has(key as LocalMusicColumnKey)
+      })
+      return normalized.length ? normalized : [...DEFAULT_VISIBLE_COLUMN_KEYS]
+    }
+
+    const normalizeSortState = (value?: LX.LocalMusic.LocalMusicDirectoryConfig['sortState'] | null): {
+      key: LocalMusicColumnKey | null
+      order: SortOrder
+    } => {
+      const key = value?.key
+      if (!key) {
+        return {
+          key: null,
+          order: 'asc' as SortOrder,
+        }
+      }
+      const targetColumn = LOCAL_MUSIC_COLUMNS.find(column => column.key === key)
+      if (!targetColumn?.sortable) {
+        return {
+          key: null,
+          order: 'asc' as SortOrder,
+        }
+      }
+      return {
+        key: targetColumn.key,
+        order: value?.order === 'desc' ? 'desc' : 'asc',
+      }
+    }
 
     const getMusicSortValue = (musicInfo: LX.Music.MusicInfoLocal, key: LocalMusicColumnKey) => {
       switch (key) {
@@ -854,6 +918,30 @@ export default {
       }
       return style
     }
+
+    const updateMusicTableViewport = () => {
+      musicTableViewportHeight.value = musicTableRef.value?.clientHeight ?? 0
+    }
+
+    const handleMusicTableScroll = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) return
+      musicTableScrollTop.value = target.scrollTop
+      updateMusicTableViewport()
+    }
+
+    const persistDirectoryConfig = debounce(() => {
+      if (isApplyingDirectoryConfig.value || !selectedDirectory.value) return
+      void localMusic.saveDirectoryConfig({
+        ...localMusic.state.value.directoryConfig,
+        currentPlaylistPath: localMusic.state.value.currentPlaylist,
+        selectedColumnKeys: [...selectedMusicColumnKeys.value],
+        sortState: {
+          key: sortState.value.key,
+          order: sortState.value.order,
+        },
+      })
+    }, 120)
 
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target
@@ -1214,6 +1302,20 @@ export default {
       if (searchInputText.value !== searchText) searchInputText.value = searchText
     }, { immediate: true })
 
+    watch(() => localMusic.state.value.directoryConfig, (config) => {
+      isApplyingDirectoryConfig.value = true
+      selectedMusicColumnKeys.value = normalizeSelectedColumnKeys(config.selectedColumnKeys)
+      sortState.value = normalizeSortState(config.sortState)
+      void nextTick(() => {
+        updateMusicTableViewport()
+        isApplyingDirectoryConfig.value = false
+      })
+    }, { immediate: true, deep: true })
+
+    watch([selectedMusicColumnKeys, sortState], () => {
+      persistDirectoryConfig()
+    }, { deep: true })
+
     watch(visibleMusicPaths, (paths) => {
       setSelectedMusicPaths(selectedMusicPaths.value.filter(path => paths.includes(path)))
     }, { immediate: true })
@@ -1236,13 +1338,24 @@ export default {
       })
     })
 
+    watch([sortedMusicFiles, visibleColumns], () => {
+      void nextTick(() => {
+        updateMusicTableViewport()
+      })
+    }, { deep: true })
+
     onMounted(() => {
       document.addEventListener('mousedown', handleClickOutside)
       void localMusic.init()
+      void nextTick(() => {
+        updateMusicTableViewport()
+      })
+      window.addEventListener('resize', updateMusicTableViewport)
     })
 
     onBeforeUnmount(() => {
       document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('resize', updateMusicTableViewport)
     })
 
     return {
@@ -1265,12 +1378,16 @@ export default {
       selectableColumns,
       visibleColumns,
       sortedMusicFiles,
+      virtualRows,
+      virtualBodyHeight,
+      musicTableStyle,
       musicColumnMenuStyle,
       searchInputText,
       isMusicColumnVisible,
       getMusicColumnText,
       getColumnStyle,
       getColumnSortMark,
+      handleMusicTableScroll,
       handleClearSearch,
       handleToggleMultiSelectMode,
       handleToggleMusicColumn,
@@ -1686,16 +1803,28 @@ export default {
 }
 
 .musicTable {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
+  position: relative;
   overflow: visible;
+}
+
+.tableHeaderRow {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  min-width: 100%;
+}
+
+.tableBody {
+  position: relative;
+  min-width: 100%;
 }
 
 .tableHeaderCell,
 .tableCell {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
   box-sizing: border-box;
   padding: 0 10px;
   border-bottom: 1px solid var(--color-primary-alpha-900);
@@ -1706,11 +1835,8 @@ export default {
 }
 
 .tableHeaderCell {
-  position: sticky;
-  top: 0;
   z-index: 3;
   height: 38px;
-  vertical-align: middle;
   font-weight: bold;
   user-select: none;
   white-space: nowrap;
@@ -1727,25 +1853,28 @@ export default {
 }
 
 .tableRow {
+  position: absolute;
+  left: 0;
+  display: flex;
+  width: 100%;
   height: 40px;
   cursor: default;
 
-  &:hover td {
+  &:hover .tableCell {
     background: var(--local-table-hover-bg);
   }
 
-  &.active td {
+  &.active .tableCell {
     background: var(--local-table-active-bg);
   }
 
-  &.selected td {
+  &.selected .tableCell {
     background: var(--local-table-hover-bg);
   }
 }
 
 .tableCell {
   height: 40px;
-  vertical-align: middle;
   overflow: hidden;
 }
 
@@ -1773,10 +1902,12 @@ export default {
 }
 
 .alignCenter {
+  justify-content: center;
   text-align: center;
 }
 
 .alignRight {
+  justify-content: flex-end;
   text-align: right;
 }
 
@@ -1794,7 +1925,7 @@ export default {
 }
 
 .clicked {
-  td {
+  .tableCell {
     background: var(--local-table-hover-bg);
   }
 }
