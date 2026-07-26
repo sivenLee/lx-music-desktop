@@ -47,7 +47,7 @@
           </div>
         </div>
         <button :class="$style.button" title="添加目录" @click="addDirectory">
-          +
+          添加目录
         </button>
         <button
           :class="$style.button"
@@ -55,7 +55,7 @@
           title="刷新目录"
           @click="handleRefreshDirectory"
         >
-          刷新
+          刷新目录
         </button>
       </div>
       <div :class="$style.buttonGroup">
@@ -666,8 +666,8 @@ export default {
       }
     }
 
-    const sortedMusicFiles = computed(() => {
-      const list = [...filteredMusicFiles.value]
+    const sortMusicFiles = (musicFiles: LX.Music.MusicInfoLocal[]) => {
+      const list = [...musicFiles]
       const { key, order } = sortState.value
       if (!key) return list
       return list.sort((left, right) => {
@@ -682,7 +682,8 @@ export default {
         })
         return order === 'asc' ? result : -result
       })
-    })
+    }
+    const sortedMusicFiles = computed(() => sortMusicFiles(filteredMusicFiles.value))
 
     const selectedDirectory = computed(() => localMusic.state.value.currentDirectory)
     const currentDirectoryPath = computed(() => selectedDirectory.value?.path ?? '')
@@ -1030,7 +1031,10 @@ export default {
     const syncPlaylistQueueIfNeeded = async(playlistPath: string, musicFiles?: LX.Music.MusicInfoLocal[]) => {
       if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return
       if (activeLocalQueueKey.value !== `playlist:${playlistPath}`) return
-      await syncLocalQueue(musicFiles ?? await localMusic.getPlaylistMusicFiles(playlistPath))
+      await syncLocalQueue(getLocalQueueMusicFiles(
+        musicFiles ?? await localMusic.getPlaylistMusicFiles(playlistPath),
+        playlistPath,
+      ))
     }
 
     const loadPlaylistSource = async(playlistPath = playlistSourcePath.value) => {
@@ -1127,9 +1131,16 @@ export default {
     }
     const isQueuePlaylistActive = (playlistPath: string) => currentQueueKey.value === `playlist:${playlistPath}`
     const isQueueAllFilesActive = computed(() => currentQueueKey.value === getLocalQueueKey(null))
-    const getCurrentLocalQueue = () => {
+    const getLocalQueueMusicFiles = (
+      musicFiles = localMusic.state.value.musicFiles,
+      playlistPath = localMusic.state.value.currentPlaylist,
+    ) => {
       // Search results are only for display; playback always uses the current raw playlist queue.
-      return localMusic.state.value.musicFiles
+      if (!playlistPath) return musicFiles
+      return sortMusicFiles(musicFiles)
+    }
+    const getCurrentLocalQueue = () => {
+      return getLocalQueueMusicFiles()
     }
 
     const normalizeLocalQueue = (musicFiles: LX.Music.MusicInfoLocal[]) => {
@@ -1314,6 +1325,19 @@ export default {
 
     watch([selectedMusicColumnKeys, sortState], () => {
       persistDirectoryConfig()
+    }, { deep: true })
+
+    watch([
+      () => localMusic.state.value.currentPlaylist,
+      () => localMusic.state.value.musicFiles,
+      () => sortState.value.key,
+      () => sortState.value.order,
+    ], () => {
+      const playlistPath = localMusic.state.value.currentPlaylist
+      if (!playlistPath) return
+      if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return
+      if (activeLocalQueueKey.value !== `playlist:${playlistPath}`) return
+      void syncLocalQueue(getLocalQueueMusicFiles(localMusic.state.value.musicFiles, playlistPath))
     }, { deep: true })
 
     watch(visibleMusicPaths, (paths) => {
@@ -1950,6 +1974,10 @@ export default {
   justify-content: center;
   color: var(--color-button-font);
   opacity: .7;
+
+  svg {
+    flex: none;
+  }
 }
 
 .checkboxCell {
