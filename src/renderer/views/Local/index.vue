@@ -112,57 +112,83 @@
     </div>
     <div :class="$style.main">
       <div :class="$style.sidebar">
-        <div :class="$style.sidebarHeader">{{ $t('local_music_playlists') }}</div>
-        <ul :class="$style.playlistList">
-          <li
+        <div :class="$style.sidebarHeader">
+          <h2 :class="$style.sidebarTitle">{{ $t('local_music_playlists') }}</h2>
+          <div :class="$style.sidebarHeaderBtns">
+            <button
+              type="button"
+              :class="$style.playlistHeaderBtn"
+              :aria-label="$t('lists__new_list_btn')"
+              title="新增播放列表"
+              @click="handleStartCreatePlaylist"
+            >
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="70%" viewBox="0 0 24 24" space="preserve">
+                <use xlink:href="#icon-list-add" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              :class="$style.playlistHeaderBtn"
+              title="刷新播放列表"
+              @click="handleRefreshDirectory"
+            >
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" style="transform: rotate(45deg);" height="70%" viewBox="0 0 24 24" space="preserve">
+                <use xlink:href="#icon-refresh" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="scroll" :class="$style.playlistList">
+          <div
             :class="[
               $style.playlistItem,
+              $style.playlistAllFilesItem,
               { [$style.active]: !localMusicState.currentPlaylist },
             ]"
             @click="showAllFiles"
           >
+            <span :class="$style.playlistAllFilesMark">*</span>
             <span :class="$style.playlistName">
               {{ $t('local_music_all_files') }}
               <span v-if="isQueueAllFilesActive" :class="$style.queueTag"></span>
             </span>
             <span :class="$style.playlistCount">{{ localMusicState.allMusicFiles.length }}</span>
-          </li>
-          <li
-            v-for="(playlist, index) in localMusicState.playlistFiles"
-            :key="index"
-            :class="[
-              $style.playlistItem,
-              { [$style.active]: localMusicState.currentPlaylist === playlist },
-              { [$style.clicked]: rightClickPlaylistPath === playlist },
-            ]"
-            @click="selectPlaylist(playlist)"
-            @contextmenu.prevent="handlePlaylistContextMenu($event, playlist)"
-          >
-            <span :class="$style.playlistName">
-              {{ getPlaylistName(playlist) }}
-              <span v-if="isQueuePlaylistActive(playlist)" :class="$style.queueTag"></span>
-            </span>
-            <span :class="$style.playlistCount">
-              {{ localMusicState.playlistCounts[playlist] ?? 0 }}
-              <span
-                v-if="(localMusicState.playlistInvalidCounts[playlist] ?? 0) > 0"
-                :class="$style.playlistInvalidCount"
-              >
-                *{{ localMusicState.playlistInvalidCounts[playlist] ?? 0 }}
-              </span>
-            </span>
-          </li>
-          <li :class="$style.playlistCreateItem">
-            <button
-              type="button"
-              :class="$style.playlistAddBtn"
-              title="新增播放列表"
-              @click="handleStartCreatePlaylist"
+          </div>
+          <ul ref="playlistSortListRef" :class="$style.playlistSortList">
+            <li
+              v-for="playlist in localMusicState.playlistFiles"
+              :key="playlist"
+              :data-playlist-path="playlist"
+              :class="[
+                $style.playlistItem,
+                $style.playlistItemSortable,
+                { [$style.active]: localMusicState.currentPlaylist === playlist },
+                { [$style.clicked]: rightClickPlaylistPath === playlist },
+              ]"
+              @click="selectPlaylist(playlist)"
+              @contextmenu.prevent="handlePlaylistContextMenu($event, playlist)"
             >
-              +
-            </button>
-          </li>
-        </ul>
+              <span
+                :class="[$style.playlistSortHandle, PLAYLIST_SORT_HANDLE_CLASS]"
+                title="拖动排序"
+                @click.stop
+              >⋮⋮</span>
+              <span :class="$style.playlistName">
+                {{ getPlaylistName(playlist) }}
+                <span v-if="isQueuePlaylistActive(playlist)" :class="$style.queueTag"></span>
+              </span>
+              <span :class="$style.playlistCount">
+                {{ localMusicState.playlistCounts[playlist] ?? 0 }}
+                <span
+                  v-if="(localMusicState.playlistInvalidCounts[playlist] ?? 0) > 0"
+                  :class="$style.playlistInvalidCount"
+                >
+                  *{{ localMusicState.playlistInvalidCounts[playlist] ?? 0 }}
+                </span>
+              </span>
+            </li>
+          </ul>
+        </div>
       </div>
       <div :class="$style.mainContent">
         <div v-if="localMusicState.isLoading" :class="$style.loading">
@@ -450,11 +476,12 @@
 </template>
 
 <script lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick, toRaw } from '@common/utils/vueTools'
+import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick, toRaw, useCssModule } from '@common/utils/vueTools'
 import { debounce } from '@common/utils'
 import { dateFormat, sizeFormate } from '@common/utils/common'
 import { useI18n } from '@renderer/plugins/i18n'
 import { useLocalMusic } from './useLocalMusic'
+import usePlaylistSort, { PLAYLIST_SORT_HANDLE_CLASS } from './usePlaylistSort'
 import { overwriteListMusics, clearListMusics } from '@renderer/store/list/action'
 import { playListById, stop } from '@renderer/core/player'
 import { setPlayListId, setPlayMusicInfo } from '@renderer/store/player/action'
@@ -541,7 +568,16 @@ export default {
   },
   setup() {
     const t = useI18n()
+    const styles = useCssModule()
     const localMusic = useLocalMusic()
+    const playlistSortListRef = ref<HTMLElement | null>(null)
+    const { refresh: refreshPlaylistSort } = usePlaylistSort({
+      dom_list: playlistSortListRef,
+      ghostClassName: styles.playlistDragGhost,
+      getPlaylistFiles: () => localMusic.state.value.playlistFiles,
+      onReorder: (playlistFiles: string[]) => { void localMusic.reorderPlaylists(playlistFiles) },
+      getWatchKey: () => localMusic.state.value.currentDirectory?.id ?? '',
+    })
     const directorySelectorRef = ref<HTMLElement | null>(null)
     const musicTableRef = ref<HTMLElement | null>(null)
     const musicColumnMenuRef = ref<HTMLElement | null>(null)
@@ -967,6 +1003,7 @@ export default {
     const playlistMenus = computed(() => [
       { name: '编辑', action: 'edit' },
       { name: window.i18n.t('lists__rename'), action: 'rename' },
+      { name: '清空列表', action: 'clearList' },
       { name: window.i18n.t('lists__remove'), action: 'remove' },
     ])
     const musicMenus = computed(() => [
@@ -1114,6 +1151,13 @@ export default {
           editingPlaylistPath.value = playlistPath
           playlistEditorName.value = localMusic.getPlaylistName(playlistPath)
           break
+        case 'clearList': {
+          const playlistName = localMusic.getPlaylistName(playlistPath)
+          if (!await dialog.confirm(`确认清空播放列表「${playlistName}」？此操作会移除列表内全部歌曲。`)) return
+          const musicFiles = await localMusic.writePlaylistText(playlistPath, '#EXTM3U\n')
+          await syncPlaylistQueueIfNeeded(playlistPath, musicFiles ?? [])
+          break
+        }
         case 'remove':
           if (!await dialog.confirm('确认删除该播放列表？')) return
           await localMusic.deletePlaylist(playlistPath)
@@ -1366,7 +1410,11 @@ export default {
 
     onMounted(() => {
       document.addEventListener('mousedown', handleClickOutside)
-      void localMusic.init()
+      void localMusic.init().finally(() => {
+        void nextTick(() => {
+          refreshPlaylistSort()
+        })
+      })
       void nextTick(() => {
         updateMusicTableViewport()
       })
@@ -1385,6 +1433,7 @@ export default {
       musicTableRef,
       musicColumnMenuRef,
       selectAllCheckboxRef,
+      playlistSortListRef,
       isDirectoryPopoverVisible,
       isMusicColumnMenuVisible,
       selectedDirectory,
@@ -1469,6 +1518,7 @@ export default {
       musicDetailTitle,
       handleCloseMusicDetailModal,
       handlePlayMusic,
+      PLAYLIST_SORT_HANDLE_CLASS,
     }
   },
 }
@@ -1678,9 +1728,9 @@ export default {
 }
 
 .sidebar {
-  width: 15%;
-  min-width: 200px;
-  flex: 0 0 15%;
+  width: 18%;
+  min-width: 220px;
+  flex: 0 0 18%;
   border-right: 1px solid var(--color-primary-alpha-900);
   display: flex;
   flex-direction: column;
@@ -1688,18 +1738,83 @@ export default {
 }
 
 .sidebarHeader {
-  padding: 10px;
-  font-weight: bold;
+  position: relative;
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
   border-bottom: 1px solid var(--color-primary-alpha-900);
 }
 
+.sidebarTitle {
+  flex: auto;
+  margin: 0;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 38px;
+  padding: 0 10px;
+}
+
+.sidebarHeaderBtns {
+  flex: none;
+  display: flex;
+}
+
+.playlistHeaderBtn {
+  margin-top: 6px;
+  background: none;
+  height: 30px;
+  border: none;
+  outline: none;
+  border-radius: @radius-border;
+  cursor: pointer;
+  color: var(--color-font-label);
+  transition: color @transition-normal;
+
+  svg {
+    vertical-align: bottom;
+  }
+
+  &:hover {
+    color: var(--color-primary);
+  }
+}
+
 .playlistList {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: scroll !important;
+  user-select: none;
+}
+
+.playlistSortList {
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
+}
+
+.playlistSortHandle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  margin-right: 4px;
+  color: var(--color-font-label);
+  cursor: grab;
+  letter-spacing: -2px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.65;
+
+  &:hover {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 
 .playlistItem {
@@ -1708,7 +1823,6 @@ export default {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  cursor: pointer;
   font-size: 12px;
   line-height: 1.2;
 
@@ -1720,6 +1834,31 @@ export default {
     background: var(--color-primary-background);
     color: var(--color-primary);
   }
+}
+
+.playlistAllFilesItem {
+  cursor: pointer;
+}
+
+.playlistAllFilesMark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  margin-right: 4px;
+  color: var(--color-font-label);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.playlistDragGhost {
+  opacity: 0.6;
+  background: var(--color-primary-background-hover);
+}
+
+.playlistItemSortable {
+  cursor: pointer;
 }
 
 .playlistName {
@@ -1752,20 +1891,6 @@ export default {
 
 .playlistItem.clicked {
   background: var(--color-primary-background-hover);
-}
-
-.playlistCreateItem {
-  padding: 8px 10px;
-}
-
-.playlistAddBtn {
-  width: 100%;
-  height: 28px;
-  border-radius: 4px;
-  border: 1px dashed var(--color-primary-background);
-  background: transparent;
-  color: var(--color-font-label);
-  cursor: pointer;
 }
 
 .mainContent {

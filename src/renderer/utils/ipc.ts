@@ -985,3 +985,13 @@ export const localMusicRemoveMusicFromPlaylist = async(params: {
     musicFilePaths: string[]
   }>(LOCAL_MUSIC_EVENT_NAME.remove_music_from_playlist, params)
 }
+
+export const localMusicSavePlaylistOrder = async(params: {
+  dirPath: string
+  playlistFiles: string[]
+}): Promise<string[]> => {
+  return rendererInvoke<{
+    dirPath: string
+    playlistFiles: string[]
+  }, string[]>(LOCAL_MUSIC_EVENT_NAME.save_playlist_order, params)
+}

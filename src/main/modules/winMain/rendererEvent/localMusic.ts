@@ -313,8 +313,38 @@ const collectPlaylistDetails = async(playlistFiles: string[]) => {
   return Object.fromEntries(details) as Record<string, LocalMusicPlaylistCacheDetail>
 }
 
-const buildDirectoryCaches = async(dirPath: string) => {
-  const { musicFiles, playlistFiles } = await scanDirectory(dirPath)
+const mergePlaylistOrder = (savedOrder: string[], scannedFiles: string[]) => {
+  const scannedPathMap = new Map(scannedFiles.map(filePath => [path.resolve(filePath), filePath]))
+  const ordered: string[] = []
+  const usedResolvedPaths = new Set<string>()
+
+  for (const filePath of savedOrder) {
+    const resolvedPath = path.resolve(filePath)
+    const matchedPath = scannedPathMap.get(resolvedPath)
+    if (!matchedPath || usedResolvedPaths.has(resolvedPath)) continue
+    ordered.push(matchedPath)
+    usedResolvedPaths.add(resolvedPath)
+  }
+
+  for (const filePath of scannedFiles) {
+    const resolvedPath = path.resolve(filePath)
+    if (usedResolvedPaths.has(resolvedPath)) continue
+    ordered.push(filePath)
+    usedResolvedPaths.add(resolvedPath)
+  }
+
+  return ordered
+}
+
+const buildDirectoryCaches = async(
+  dirPath: string,
+  previousPlaylistsCache?: LocalMusicPlaylistsCache | null,
+) => {
+  const { musicFiles, playlistFiles: scannedPlaylistFiles } = await scanDirectory(dirPath)
+  const playlistFiles = mergePlaylistOrder(
+    previousPlaylistsCache?.playlistFiles ?? [],
+    scannedPlaylistFiles,
+  )
   const [musicInfos, playlistDetails] = await Promise.all([
     createLocalMusicInfos(musicFiles),
     collectPlaylistDetails(playlistFiles),
@@ -478,12 +508,13 @@ export default () => {
     directoryConfig: LX.LocalMusic.LocalMusicDirectoryConfig
   }>(LOCAL_MUSIC_EVENT_NAME.scan_directory, async({ params }) => {
     const { dirPath, forceRefresh = false } = params
+    const previousPlaylistsCache = await readPlaylistsCache(dirPath)
     const [cachedSongs, cachedPlaylists] = forceRefresh
       ? [null, null]
       : await Promise.all([readSongsCache(dirPath), readPlaylistsCache(dirPath)])
     const { songsCache, playlistsCache } = cachedSongs && cachedPlaylists
       ? { songsCache: cachedSongs, playlistsCache: cachedPlaylists }
-      : await buildDirectoryCaches(dirPath)
+      : await buildDirectoryCaches(dirPath, previousPlaylistsCache)
     if (!cachedSongs || !cachedPlaylists) {
       await Promise.all([
         writeSongsCache(songsCache),
@@ -646,5 +677,32 @@ export default () => {
       currentMusicFilePaths.filter(filePath => !removePathSet.has(path.resolve(filePath))),
     )
     await syncPlaylistsCacheAfterPlaylistChange(params.playlistPath)
+  })
+
+  mainHandle<{
+    dirPath: string
+    playlistFiles: string[]
+  }, string[]>(LOCAL_MUSIC_EVENT_NAME.save_playlist_order, async({ params }) => {
+    const playlistsCache = await readPlaylistsCache(params.dirPath)
+    if (!playlistsCache) return params.playlistFiles
+    const playlistPathSet = new Set(playlistsCache.playlistFiles.map(filePath => path.resolve(filePath)))
+    const ordered: string[] = []
+    const usedResolvedPaths = new Set<string>()
+    for (const filePath of params.playlistFiles) {
+      const resolvedPath = path.resolve(filePath)
+      if (!playlistPathSet.has(resolvedPath) || usedResolvedPaths.has(resolvedPath)) continue
+      ordered.push(filePath)
+      usedResolvedPaths.add(resolvedPath)
+    }
+    for (const filePath of playlistsCache.playlistFiles) {
+      const resolvedPath = path.resolve(filePath)
+      if (usedResolvedPaths.has(resolvedPath)) continue
+      ordered.push(filePath)
+      usedResolvedPaths.add(resolvedPath)
+    }
+    playlistsCache.playlistFiles = ordered
+    playlistsCache.generatedAt = Date.now()
+    await writePlaylistsCache(playlistsCache)
+    return ordered
   })
 }

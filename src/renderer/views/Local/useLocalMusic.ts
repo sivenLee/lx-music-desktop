@@ -14,6 +14,7 @@ import {
   localMusicDeletePlaylist,
   localMusicAddMusicToPlaylist,
   localMusicRemoveMusicFromPlaylist,
+  localMusicSavePlaylistOrder,
   localMusicReadPlaylistText,
   localMusicWritePlaylistText,
   showSelectDialog,
@@ -545,6 +546,22 @@ export function useLocalMusic() {
     return removeMusicsFromPlaylist(playlistPath, [musicInfo])
   }
 
+  const reorderPlaylists = async(playlistFiles: string[]) => {
+    if (!state.value.currentDirectory) return playlistFiles
+    state.value.playlistFiles = [...playlistFiles]
+    try {
+      const ordered = await localMusicSavePlaylistOrder({
+        dirPath: state.value.currentDirectory.path,
+        playlistFiles,
+      })
+      state.value.playlistFiles = ordered
+      return ordered
+    } catch (err) {
+      console.error('Failed to reorder playlists:', err)
+      return state.value.playlistFiles
+    }
+  }
+
   return {
     state,
     filteredMusicFiles,
@@ -569,5 +586,6 @@ export function useLocalMusic() {
     addMusicToPlaylist,
     removeMusicsFromPlaylist,
     removeMusicFromPlaylist,
+    reorderPlaylists,
   }
 }
