@@ -1033,7 +1033,6 @@ export default {
       if (activeLocalQueueKey.value !== `playlist:${playlistPath}`) return
       await syncLocalQueue(getLocalQueueMusicFiles(
         musicFiles ?? await localMusic.getPlaylistMusicFiles(playlistPath),
-        playlistPath,
       ))
     }
 
@@ -1133,10 +1132,8 @@ export default {
     const isQueueAllFilesActive = computed(() => currentQueueKey.value === getLocalQueueKey(null))
     const getLocalQueueMusicFiles = (
       musicFiles = localMusic.state.value.musicFiles,
-      playlistPath = localMusic.state.value.currentPlaylist,
     ) => {
-      // Search results are only for display; playback always uses the current raw playlist queue.
-      if (!playlistPath) return musicFiles
+      // Search results are only for display; playback always uses the current raw list with sort applied.
       return sortMusicFiles(musicFiles)
     }
     const getCurrentLocalQueue = () => {
@@ -1333,11 +1330,10 @@ export default {
       () => sortState.value.key,
       () => sortState.value.order,
     ], () => {
-      const playlistPath = localMusic.state.value.currentPlaylist
-      if (!playlistPath) return
       if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return
-      if (activeLocalQueueKey.value !== `playlist:${playlistPath}`) return
-      void syncLocalQueue(getLocalQueueMusicFiles(localMusic.state.value.musicFiles, playlistPath))
+      const expectedQueueKey = getLocalQueueKey()
+      if (activeLocalQueueKey.value !== expectedQueueKey) return
+      void syncLocalQueue(getLocalQueueMusicFiles())
     }, { deep: true })
 
     watch(visibleMusicPaths, (paths) => {
