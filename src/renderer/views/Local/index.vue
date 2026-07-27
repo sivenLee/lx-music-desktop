@@ -156,6 +156,7 @@
 
 <script lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick } from '@common/utils/vueTools'
+import { onActivated } from 'vue'
 import { debounce } from '@common/utils'
 import { useI18n } from '@renderer/plugins/i18n'
 import { useLocalMusic } from './useLocalMusic'
@@ -477,6 +478,13 @@ export default {
         })
       })
       musicTable.setupViewportListeners()
+    })
+
+    onActivated(() => {
+      musicTable.refreshMusicTableLayout()
+      void nextTick(() => {
+        playlistSidebarComponentRef.value?.refreshPlaylistSort()
+      })
     })
 
     onBeforeUnmount(() => {

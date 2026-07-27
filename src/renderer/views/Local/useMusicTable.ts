@@ -179,6 +179,35 @@ export function useMusicTable({
     musicTableViewportHeight.value = getMusicTableElement()?.clientHeight ?? 0
   }
 
+  // KeepAlive 重新挂载后 scrollTop 常被浏览器置 0，需用缓存值恢复，避免虚拟区间与视口错位导致空白
+  const syncMusicTableScroll = () => {
+    const tableElement = getMusicTableElement()
+    if (!tableElement) {
+      updateMusicTableViewport()
+      return false
+    }
+    tableElement.scrollTop = musicTableScrollTop.value
+    const height = tableElement.clientHeight
+    if (height > 0) {
+      musicTableViewportHeight.value = height
+      return true
+    }
+    musicTableViewportHeight.value = 0
+    return false
+  }
+
+  const refreshMusicTableLayout = () => {
+    void nextTick(() => {
+      if (syncMusicTableScroll()) return
+      requestAnimationFrame(() => {
+        if (syncMusicTableScroll()) return
+        void nextTick(() => {
+          syncMusicTableScroll()
+        })
+      })
+    })
+  }
+
   const resetMusicTableScroll = () => {
     musicTableScrollTop.value = 0
     const tableElement = getMusicTableElement()
@@ -241,9 +270,7 @@ export function useMusicTable({
   })
 
   const setupViewportListeners = () => {
-    void nextTick(() => {
-      updateMusicTableViewport()
-    })
+    refreshMusicTableLayout()
     window.addEventListener('resize', updateMusicTableViewport)
   }
 
@@ -271,6 +298,7 @@ export function useMusicTable({
     getColumnSortMark,
     handleMusicTableScroll,
     resetMusicTableScroll,
+    refreshMusicTableLayout,
     updateMusicTableViewport,
     setupViewportListeners,
     teardownViewportListeners,
