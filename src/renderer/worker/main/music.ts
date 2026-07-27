@@ -1,4 +1,5 @@
 import { getLocalMusicFileLyric, getLocalMusicFilePic } from '@renderer/utils/music'
+import { encodePath } from '@common/utils/common'
 import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs/promises'
@@ -15,13 +16,14 @@ const getTempDir = async() => {
 export const getMusicFilePic = async(filePath: string) => {
   const picture = await getLocalMusicFilePic(filePath)
   if (!picture) return ''
-  if (typeof picture == 'string') return picture
+  if (typeof picture == 'string') return encodePath(picture)
   if (picture.data.length > 400_000) {
     try {
       const tempDir = await getTempDir()
-      const tempFile = path.join(tempDir, path.basename(filePath) + '.' + picture.format.split('/')[1])
+      const ext = picture.format.includes('/') ? picture.format.split('/')[1] : (picture.format || 'jpg')
+      const tempFile = path.join(tempDir, path.basename(filePath) + '.' + ext)
       await fs.writeFile(tempFile, picture.data)
-      return tempFile
+      return encodePath(tempFile)
     } catch (err) {
       console.log(err)
     }

@@ -265,6 +265,11 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
     console.log(err)
   }
   const comment = metadata.common.comment?.map(item => item.text?.trim() ?? '').filter(Boolean).join('\n') ?? ''
+  const formatTrackDisk = (value?: { no: number | null, of: number | null }) => {
+    if (!value || value.no == null) return null
+    if (value.of == null) return `${value.no}`
+    return `${value.no}/${value.of}`
+  }
 
   return {
     id: filePath,
@@ -281,6 +286,8 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
       fileName: basename(filePath),
       duration,
       year: metadata.common.year ?? null,
+      track: formatTrackDisk(metadata.common.track),
+      disk: formatTrackDisk(metadata.common.disk),
       genre: metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? '',
       comment,
       createTime: stats?.birthtimeMs ?? null,

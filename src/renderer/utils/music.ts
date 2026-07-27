@@ -54,6 +54,12 @@ export const getMusicFilePath = async(musicInfo: LX.Music.MusicInfo | LX.Downloa
   return ''
 }
 
+const formatTrackDisk = (value?: { no: number | null, of: number | null }) => {
+  if (!value || value.no == null) return null
+  if (value.of == null) return `${value.no}`
+  return `${value.no}/${value.of}`
+}
+
 /**
  * 创建本地音乐信息对象
  * @param path 文件路径
@@ -97,6 +103,8 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
       fileName: basename(path),
       duration,
       year: metadata.common.year ?? null,
+      track: formatTrackDisk(metadata.common.track),
+      disk: formatTrackDisk(metadata.common.disk),
       genre: metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? '',
       comment,
       createTime: stats?.birthtimeMs ?? null,
@@ -141,6 +149,7 @@ export interface LocalMusicDetailInfo {
   audioInfo: LocalMusicDetailField[]
   customFields: LocalMusicDetailField[]
   coverUrl: string
+  coverInfo: LocalMusicDetailField[]
   lyric: string
 }
 
@@ -152,6 +161,9 @@ const detailCommonFieldNames = new Set([
   'album',
   'picture',
   'year',
+  'track',
+  'disk',
+  'date',
   'genre',
   'comment',
   'lyrics',
@@ -196,6 +208,48 @@ export const getLocalMusicCoverUrl = async(path: string) => {
   return getDetailCoverUrl(path)
 }
 
+const getCoverInfoFields = async(path: string): Promise<LocalMusicDetailField[]> => {
+  const picture = await getLocalMusicFilePic(path)
+  if (!picture) return []
+
+  try {
+    const imageSize = (await import('image-size')).default
+    if (typeof picture == 'string') {
+      const stats = await getFileStats(picture)
+      const size = imageSize(picture)
+      const type = extname(picture).replace(/^\./, '').toUpperCase() || (size.type?.toUpperCase() ?? '')
+      return [
+        createDetailField('类型', type),
+        createDetailField('尺寸', size.width && size.height ? `${size.width} × ${size.height}` : ''),
+        createDetailField('大小', stats ? `${sizeFormate(stats.size)} (${stats.size} B)` : ''),
+      ]
+    }
+
+    const size = imageSize(Buffer.from(picture.data))
+    const type = picture.format || size.type || ''
+    return [
+      createDetailField('类型', type),
+      createDetailField('尺寸', size.width && size.height ? `${size.width} × ${size.height}` : ''),
+      createDetailField('大小', `${sizeFormate(picture.data.length)} (${picture.data.length} B)`),
+    ]
+  } catch (err) {
+    console.log(err)
+    if (typeof picture == 'string') {
+      const stats = await getFileStats(picture)
+      return [
+        createDetailField('类型', extname(picture).replace(/^\./, '').toUpperCase()),
+        createDetailField('尺寸', ''),
+        createDetailField('大小', stats ? `${sizeFormate(stats.size)} (${stats.size} B)` : ''),
+      ]
+    }
+    return [
+      createDetailField('类型', picture.format),
+      createDetailField('尺寸', ''),
+      createDetailField('大小', `${sizeFormate(picture.data.length)} (${picture.data.length} B)`),
+    ]
+  }
+}
+
 const getDetailCustomFields = (metadata: IAudioMetadata | null): LocalMusicDetailField[] => {
   if (!metadata) return []
   return Object.entries(metadata.common).map(([key, value]) => {
@@ -212,11 +266,12 @@ const getDetailCustomFields = (metadata: IAudioMetadata | null): LocalMusicDetai
 export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDetailInfo | null> => {
   if (!await checkPath(path)) return null
 
-  const [stats, metadata, lyricInfo, coverUrl] = await Promise.all([
+  const [stats, metadata, lyricInfo, coverUrl, coverInfo] = await Promise.all([
     getFileStats(path),
     getFileMetadata(path),
     getLocalMusicFileLyric(path),
     getDetailCoverUrl(path),
+    getCoverInfoFields(path),
   ])
   if (!stats) return null
 
@@ -240,6 +295,8 @@ export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDe
       createDetailField('专辑名', common?.album),
       createDetailField('时长', format?.duration ? formatPlayTime(format.duration) : ''),
       createDetailField('年代', common?.year),
+      createDetailField('音轨号', formatTrackDisk(common?.track)),
+      createDetailField('碟号', formatTrackDisk(common?.disk)),
       createDetailField('流派', common?.genre?.join(' / ')),
       createDetailField('注释', comment),
     ],
@@ -253,6 +310,7 @@ export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDe
     ],
     customFields: getDetailCustomFields(metadata),
     coverUrl,
+    coverInfo,
     lyric: lyricInfo?.lyric?.trim() ?? '',
   }
 }

@@ -463,6 +463,16 @@
             <div :class="$style.musicDetailCoverWrap">
               <img v-if="musicDetailInfo.coverUrl" :src="musicDetailInfo.coverUrl" :class="$style.musicDetailCover" alt="专辑封面" />
               <div v-else :class="$style.musicDetailCoverEmpty">无封面</div>
+              <div v-if="musicDetailInfo.coverInfo.length" :class="$style.musicDetailCoverInfo">
+                <div
+                  v-for="(detail, index) in musicDetailInfo.coverInfo"
+                  :key="index"
+                  :class="$style.musicDetailCoverInfoItem"
+                >
+                  <span :class="$style.musicDetailCoverInfoLabel">{{ detail.label }}</span>
+                  <span :class="$style.musicDetailCoverInfoValue">{{ detail.value }}</span>
+                </div>
+              </div>
             </div>
             <div :class="$style.musicDetailLyricBlock">
               <div :class="$style.musicDetailLyricTitle">歌词</div>
@@ -506,6 +516,8 @@ type LocalMusicColumnKey =
   | 'albumName'
   | 'duration'
   | 'year'
+  | 'track'
+  | 'disk'
   | 'genre'
   | 'comment'
   | 'customTag'
@@ -543,6 +555,8 @@ const LOCAL_MUSIC_COLUMNS: LocalMusicColumnDefinition[] = [
   { key: 'albumName', label: '专辑名', width: 180, sortable: true, defaultVisible: true },
   { key: 'duration', label: '时长', width: 104, sortable: true, defaultVisible: true, align: 'center' },
   { key: 'year', label: '年代', width: 88, sortable: true, defaultVisible: true, align: 'center' },
+  { key: 'track', label: '音轨号', width: 88, sortable: true, align: 'center' },
+  { key: 'disk', label: '碟号', width: 88, sortable: true, align: 'center' },
   { key: 'genre', label: '流派', width: 140 },
   { key: 'comment', label: '注释', width: 220 },
   { key: 'customTag', label: '自定义标签', width: 120, align: 'center' },
@@ -609,12 +623,21 @@ export default {
     })
     const totalColumnWidth = computed(() => visibleColumns.value.reduce((total, column) => total + column.width, 0))
     const visibleRange = computed(() => {
+      const total = sortedMusicFiles.value.length
+      if (!total) return { start: 0, end: 0 }
       const bodyScrollTop = Math.max(musicTableScrollTop.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
       const viewportHeight = Math.max(musicTableViewportHeight.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
-      const start = Math.max(Math.floor(bodyScrollTop / LOCAL_MUSIC_ROW_HEIGHT) - LOCAL_MUSIC_OVERSCAN, 0)
+      const maxStart = Math.max(total - 1, 0)
+      const start = Math.min(
+        Math.max(Math.floor(bodyScrollTop / LOCAL_MUSIC_ROW_HEIGHT) - LOCAL_MUSIC_OVERSCAN, 0),
+        maxStart,
+      )
       const end = Math.min(
-        sortedMusicFiles.value.length,
-        Math.ceil((bodyScrollTop + viewportHeight) / LOCAL_MUSIC_ROW_HEIGHT) + LOCAL_MUSIC_OVERSCAN,
+        total,
+        Math.max(
+          start + 1,
+          Math.ceil((bodyScrollTop + viewportHeight) / LOCAL_MUSIC_ROW_HEIGHT) + LOCAL_MUSIC_OVERSCAN,
+        ),
       )
       return { start, end }
     })
@@ -683,6 +706,10 @@ export default {
           return musicInfo.meta.duration ?? -1
         case 'year':
           return musicInfo.meta.year ?? -1
+        case 'track':
+          return musicInfo.meta.track ?? ''
+        case 'disk':
+          return musicInfo.meta.disk ?? ''
         case 'createTime':
           return musicInfo.meta.createTime ?? -1
         case 'modifyTime':
@@ -850,6 +877,10 @@ export default {
           return formatMusicColumnText(musicInfo.interval ?? '--/--')
         case 'year':
           return formatMusicColumnText(musicInfo.meta.year)
+        case 'track':
+          return formatMusicColumnText(musicInfo.meta.track)
+        case 'disk':
+          return formatMusicColumnText(musicInfo.meta.disk)
         case 'genre':
           return formatMusicColumnText(musicInfo.meta.genre)
         case 'comment':
@@ -958,6 +989,14 @@ export default {
 
     const updateMusicTableViewport = () => {
       musicTableViewportHeight.value = musicTableRef.value?.clientHeight ?? 0
+    }
+
+    const resetMusicTableScroll = () => {
+      musicTableScrollTop.value = 0
+      if (musicTableRef.value) musicTableRef.value.scrollTop = 0
+      void nextTick(() => {
+        updateMusicTableViewport()
+      })
     }
 
     const handleMusicTableScroll = (event: Event) => {
@@ -1407,6 +1446,18 @@ export default {
         updateMusicTableViewport()
       })
     }, { deep: true })
+
+    watch(() => localMusic.state.value.currentPlaylist, () => {
+      resetMusicTableScroll()
+    })
+
+    watch(() => localMusic.state.value.currentDirectory?.id, () => {
+      resetMusicTableScroll()
+    })
+
+    watch(() => localMusic.state.value.searchText, () => {
+      resetMusicTableScroll()
+    })
 
     onMounted(() => {
       document.addEventListener('mousedown', handleClickOutside)
@@ -2439,6 +2490,32 @@ export default {
   justify-content: center;
   color: var(--color-font-label);
   font-size: 13px;
+}
+
+.musicDetailCoverInfo {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.musicDetailCoverInfoItem {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.musicDetailCoverInfoLabel {
+  flex: 0 0 36px;
+  color: var(--color-font-label);
+}
+
+.musicDetailCoverInfoValue {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+  color: var(--color-font);
 }
 
 .musicDetailRows {

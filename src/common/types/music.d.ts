@@ -37,6 +37,8 @@ declare namespace LX {
       fileName?: string
       duration?: number | null
       year?: number | null
+      track?: string | null
+      disk?: string | null
       genre?: string
       comment?: string
       createTime?: number | null
