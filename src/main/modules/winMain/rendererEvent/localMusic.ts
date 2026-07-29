@@ -10,6 +10,7 @@ import {
   parseM3UPlaylistDetail,
   generateId,
 } from '@common/utils/localMusic'
+import { setMeta } from '@common/utils/musicMeta'
 import path from 'node:path'
 
 const LOCAL_MUSIC_STORE_NAME = 'localMusic'
@@ -117,11 +118,23 @@ const readSongsCache = async(dirPath: string): Promise<LocalMusicSongsCache | nu
       cache.version !== LOCAL_MUSIC_CACHE_VERSION ||
       !Array.isArray(cache.musicFiles)
     ) return null
+    const musicFiles = cache.musicFiles.map((musicInfo) => {
+      const meta = musicInfo?.meta as LX.Music.MusicInfoMeta_local & { disk?: string | null } | undefined
+      if (!meta || meta.disc != null || meta.disk == null) return musicInfo
+      const { disk, ...restMeta } = meta
+      return {
+        ...musicInfo,
+        meta: {
+          ...restMeta,
+          disc: disk,
+        },
+      }
+    })
     return {
       version: LOCAL_MUSIC_CACHE_VERSION,
       dirPath: typeof cache.dirPath == 'string' ? cache.dirPath : dirPath,
       generatedAt: typeof cache.generatedAt == 'number' ? cache.generatedAt : Date.now(),
-      musicFiles: cache.musicFiles,
+      musicFiles,
     }
   } catch (err) {
     console.error('Failed to read local music songs cache:', err)
@@ -239,6 +252,63 @@ const writePlaylistMusicFilePaths = async(playlistPath: string, musicFilePaths: 
   await fs.promises.writeFile(playlistPath, `${lines.join('\n')}\n`, { encoding: 'utf8' })
 }
 
+const stringifyTagValue = (value: unknown): string => {
+  if (value == null) return ''
+  if (typeof value == 'string') return value.trim()
+  if (typeof value == 'number') return Number.isFinite(value) ? `${value}` : ''
+  if (Array.isArray(value)) return value.map(item => stringifyTagValue(item)).filter(Boolean).join(' / ')
+  if (typeof value == 'object') {
+    if ('text' in value && typeof (value as { text?: unknown }).text == 'string') {
+      return ((value as { text: string }).text).trim()
+    }
+    if ('value' in value && typeof (value as { value?: unknown }).value == 'string') {
+      return ((value as { value: string }).value).trim()
+    }
+  }
+  return String(value).trim()
+}
+
+const extractNativeTagValue = (metadata: { native?: Record<string, Array<{ id?: string, value?: unknown }>> } | null | undefined, tagId: string) => {
+  if (!metadata?.native) return ''
+  const target = tagId.toUpperCase()
+  for (const tags of Object.values(metadata.native)) {
+    if (!Array.isArray(tags)) continue
+    for (const tag of tags) {
+      const id = `${tag.id ?? ''}`.toUpperCase()
+      if (id === target || id.endsWith(`:${target}`) || id.endsWith(`/${target}`)) {
+        return stringifyTagValue(tag.value)
+      }
+      if (id.includes('TXXX') || id.includes('USERDEFINEDTEXT')) {
+        const value = tag.value as { description?: string, text?: string, value?: string } | string
+        if (typeof value == 'object' && value && `${value.description ?? ''}`.toUpperCase() === target) {
+          return stringifyTagValue(value.text ?? value.value)
+        }
+      }
+    }
+  }
+  return ''
+}
+
+const getPreferredGenre = (metadata: {
+  common?: { genre?: string[] }
+  native?: Record<string, Array<{ id?: string, value?: unknown }>>
+} | null | undefined) => {
+  if (!metadata) return ''
+  const native = metadata.native ?? {}
+  for (const fmt of ['ID3v2.4', 'ID3v2.3', 'ID3v2.2', 'vorbis']) {
+    const tags = native[fmt]
+    if (!Array.isArray(tags)) continue
+    for (const tag of tags) {
+      const id = `${tag.id ?? ''}`.toUpperCase()
+      if (id === 'TCON' || id === 'TCO' || id === 'GENRE' || id.endsWith(':GENRE') || id.endsWith('/GENRE')) {
+        const text = stringifyTagValue(tag.value)
+        if (text) return text
+      }
+    }
+  }
+  return metadata.common?.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? ''
+}
+
 const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfoLocal | null> => {
   if (!await checkPath(filePath)) return null
   const { parseFile } = await import('music-metadata')
@@ -265,7 +335,7 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
     console.log(err)
   }
   const comment = metadata.common.comment?.map(item => item.text?.trim() ?? '').filter(Boolean).join('\n') ?? ''
-  const formatTrackDisk = (value?: { no: number | null, of: number | null }) => {
+  const formatTrackDisc = (value?: { no: number | null, of: number | null }) => {
     if (!value || value.no == null) return null
     if (value.of == null) return `${value.no}`
     return `${value.no}/${value.of}`
@@ -286,10 +356,12 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
       fileName: basename(filePath),
       duration,
       year: metadata.common.year ?? null,
-      track: formatTrackDisk(metadata.common.track),
-      disk: formatTrackDisk(metadata.common.disk),
-      genre: metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? '',
+      track: formatTrackDisc(metadata.common.track),
+      disc: formatTrackDisc(metadata.common.disk),
+      genre: getPreferredGenre(metadata),
+      language: metadata.common.language?.trim() ?? '',
       comment,
+      customTags: extractNativeTagValue(metadata, 'CUSTOM_TAGS'),
       createTime: stats?.birthtimeMs ?? null,
       modifyTime: stats?.mtimeMs ?? null,
       fileSize: stats?.size ?? null,
@@ -711,5 +783,35 @@ export default () => {
     playlistsCache.generatedAt = Date.now()
     await writePlaylistsCache(playlistsCache)
     return ordered
+  })
+
+  mainHandle<{
+    dirPath: string
+    filePath: string
+    meta: LX.Music.MusicFileMeta
+  }, LX.Music.MusicInfoLocal>(LOCAL_MUSIC_EVENT_NAME.write_music_meta, async({ params }) => {
+    const ext = extname(params.filePath).replace(/^\./, '').toLowerCase()
+    if (ext !== 'mp3' && ext !== 'flac') throw new Error('Only MP3 and FLAC are supported')
+    if (!await checkPath(params.filePath)) throw new Error('Music file not exists')
+
+    await setMeta(params.filePath, params.meta)
+
+    const musicInfo = await createLocalMusicInfo(params.filePath)
+    if (!musicInfo) throw new Error('Failed to read music info after writing meta')
+
+    const songsCache = await readSongsCache(params.dirPath)
+    if (songsCache) {
+      const targetPath = path.resolve(params.filePath)
+      const index = songsCache.musicFiles.findIndex(item => path.resolve(item.meta.filePath) === targetPath)
+      if (index >= 0) {
+        songsCache.musicFiles[index] = musicInfo
+      } else {
+        songsCache.musicFiles.push(musicInfo)
+      }
+      songsCache.generatedAt = Date.now()
+      await writeSongsCache(songsCache)
+    }
+
+    return musicInfo
   })
 }

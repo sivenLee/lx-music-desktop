@@ -4,6 +4,7 @@ import { httpFetch } from '../../request'
 import { formatPlayTime, decodeName } from '../../index'
 // import { debug } from '../../utils/env'
 import { formatSinger } from './util'
+import { formatGenre } from '../utils'
 
 export default {
   regExps: {
@@ -91,6 +92,11 @@ export default {
         lrc: null,
         img: null,
         otherSource: null,
+        year: `${info.RELEASEDATE || info.releasedate || info.releaseDate || ''}`.slice(0, 4),
+        track: (info.TRACK || info.track) ? `${info.TRACK || info.track}` : '',
+        disc: (info.DISC || info.disc) ? `${info.DISC || info.disc}` : '',
+        genre: formatGenre(info.GENRE, info.genre),
+        language: formatGenre(info.LANGUAGE, info.language, info.LANG, info.lang),
         types,
         _types,
         typeUrl: {},

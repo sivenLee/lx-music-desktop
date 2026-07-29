@@ -23,6 +23,20 @@ let electronProcess = null
 let hotMiddlewareRenderer
 let hotMiddlewareRendererLyric
 
+// ResizeObserver 在 HMR/布局抖动时会抛出良性 runtime 告警，webpack overlay 会挡住操作且关闭按钮无效
+const ignoreRuntimeErrorMessages = [
+  'ResizeObserver loop completed with undelivered notifications.',
+  'ResizeObserver loop limit exceeded',
+]
+const clientOverlay = {
+  errors: true,
+  warnings: false,
+  runtimeErrors: (error) => {
+    const message = error?.message || String(error || '')
+    if (ignoreRuntimeErrorMessages.some(item => message.includes(item))) return false
+    return true
+  },
+}
 
 function startRenderer() {
   return new Promise((resolve, reject) => {
@@ -57,7 +71,7 @@ function startRenderer() {
       },
       client: {
         logging: 'warn',
-        overlay: true,
+        overlay: clientOverlay,
       },
       setupMiddlewares(middlewares, devServer) {
         devServer.app.use(hotMiddlewareRenderer)
@@ -105,7 +119,7 @@ function startRendererLyric() {
       // },
       client: {
         logging: 'warn',
-        overlay: true,
+        overlay: clientOverlay,
       },
       setupMiddlewares(middlewares, devServer) {
         devServer.app.use(hotMiddlewareRenderer)

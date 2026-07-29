@@ -151,6 +151,14 @@
       v-model:visible="isMusicDetailVisible"
       :music-info="musicDetailTarget"
     />
+    <MusicMetaEditorModal
+      v-model:visible="isMusicMetaEditorVisible"
+      :music-info="musicMetaEditorTarget"
+      :music-list="sortedMusicFiles"
+      :dir-path="currentDirectoryPath"
+      @change="handleMusicMetaEditorChange"
+      @saved="handleMusicMetaSaved"
+    />
   </div>
 </template>
 
@@ -169,10 +177,12 @@ import ColumnMenu from './components/ColumnMenu.vue'
 import PlaylistSidebar from './components/PlaylistSidebar.vue'
 import MusicTable from './components/MusicTable.vue'
 import MusicDetailModal from './components/MusicDetailModal.vue'
+import MusicMetaEditorModal from './components/MusicMetaEditorModal.vue'
 import PlaylistNameEditor from './components/PlaylistNameEditor.vue'
 import PlaylistSourceEditor from './components/PlaylistSourceEditor.vue'
 import MusicAddModal from './components/MusicAddModal.vue'
 import { playMusicInfo } from '@renderer/store/player/state'
+import { isLocalMusicMetaEditable } from '@renderer/utils/music'
 
 export default {
   name: 'LocalMusic',
@@ -182,6 +192,7 @@ export default {
     PlaylistSidebar,
     MusicTable,
     MusicDetailModal,
+    MusicMetaEditorModal,
     PlaylistNameEditor,
     PlaylistSourceEditor,
     MusicAddModal,
@@ -252,6 +263,11 @@ export default {
         action: 'detail',
       },
       {
+        name: '编辑元信息',
+        action: 'editMeta',
+        disabled: !rightClickMusicInfo.value || !isLocalMusicMetaEditable(rightClickMusicInfo.value.meta.filePath),
+      },
+      {
         name: t('list__remove'),
         action: 'remove',
         disabled: !localMusic.state.value.currentPlaylist,
@@ -268,6 +284,8 @@ export default {
     const selectedAddMusicInfos = ref<LX.Music.MusicInfoLocal[]>([])
     const isMusicDetailVisible = ref(false)
     const musicDetailTarget = ref<LX.Music.MusicInfoLocal | null>(null)
+    const isMusicMetaEditorVisible = ref(false)
+    const musicMetaEditorTarget = ref<LX.Music.MusicInfoLocal | null>(null)
 
     const handleToggleDirectoryPopover = () => {
       isDirectoryPopoverVisible.value = !isDirectoryPopoverVisible.value
@@ -391,6 +409,24 @@ export default {
       isMusicDetailVisible.value = true
     }
 
+    const handleShowMusicMetaEditor = (musicInfo: LX.Music.MusicInfoLocal) => {
+      if (!isLocalMusicMetaEditable(musicInfo.meta.filePath)) {
+        void dialog('仅支持编辑 MP3 / FLAC 格式文件')
+        return
+      }
+      musicMetaEditorTarget.value = musicInfo
+      isMusicMetaEditorVisible.value = true
+    }
+
+    const handleMusicMetaEditorChange = (musicInfo: LX.Music.MusicInfoLocal) => {
+      musicMetaEditorTarget.value = musicInfo
+    }
+
+    const handleMusicMetaSaved = (musicInfo: LX.Music.MusicInfoLocal) => {
+      localMusic.applyUpdatedMusicInfo(musicInfo)
+      musicMetaEditorTarget.value = musicInfo
+    }
+
     const handleAddMusicToPlaylist = async(playlistPath: string) => {
       if (!selectedAddMusicInfos.value.length) return
       const updatedList = await localMusic.addMusicsToPlaylist(playlistPath, selectedAddMusicInfos.value)
@@ -415,6 +451,9 @@ export default {
           break
         case 'detail':
           handleShowMusicDetail(musicInfo)
+          break
+        case 'editMeta':
+          handleShowMusicMetaEditor(musicInfo)
           break
         case 'remove': {
           const playlistPath = localMusic.state.value.currentPlaylist
@@ -541,6 +580,10 @@ export default {
       handleAddMusicToPlaylist,
       isMusicDetailVisible,
       musicDetailTarget,
+      isMusicMetaEditorVisible,
+      musicMetaEditorTarget,
+      handleMusicMetaEditorChange,
+      handleMusicMetaSaved,
       handlePlayMusic,
       handleShowSelectedMusicAddModal,
       handleRemoveSelectedMusics,

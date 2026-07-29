@@ -162,6 +162,7 @@ export default {
   flex-flow: column nowrap;
   min-height: 0;
   padding: 18px 20px 20px;
+  user-select: text;
 }
 
 .musicDetailTitle {

@@ -38,9 +38,11 @@ declare namespace LX {
       duration?: number | null
       year?: number | null
       track?: string | null
-      disk?: string | null
+      disc?: string | null
       genre?: string
+      language?: string
       comment?: string
+      customTags?: string
       createTime?: number | null
       modifyTime?: number | null
       fileSize?: number | null
@@ -123,6 +125,13 @@ declare namespace LX {
       album: string | null
       APIC: string | null
       lyrics: string | null
+      year?: string | null
+      track?: string | null
+      disc?: string | null
+      genre?: string | null
+      language?: string | null
+      comment?: string | null
+      CUSTOM_TAGS?: string | null
     }
 
     interface MusicUrlInfo {

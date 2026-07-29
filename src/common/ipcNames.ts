@@ -27,6 +27,7 @@ const modules = {
     add_music_to_playlist: 'local_music_add_music_to_playlist',
     remove_music_from_playlist: 'local_music_remove_music_from_playlist',
     save_playlist_order: 'local_music_save_playlist_order',
+    write_music_meta: 'local_music_write_music_meta',
   },
   player: {
     invoke_play_music: 'play_music',

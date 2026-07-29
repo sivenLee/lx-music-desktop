@@ -54,7 +54,7 @@ export const getMusicFilePath = async(musicInfo: LX.Music.MusicInfo | LX.Downloa
   return ''
 }
 
-const formatTrackDisk = (value?: { no: number | null, of: number | null }) => {
+const formatTrackDisc = (value?: { no: number | null, of: number | null }) => {
   if (!value || value.no == null) return null
   if (value.of == null) return `${value.no}`
   return `${value.no}/${value.of}`
@@ -103,10 +103,12 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
       fileName: basename(path),
       duration,
       year: metadata.common.year ?? null,
-      track: formatTrackDisk(metadata.common.track),
-      disk: formatTrackDisk(metadata.common.disk),
-      genre: metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? '',
+      track: formatTrackDisc(metadata.common.track),
+      disc: formatTrackDisc(metadata.common.disk),
+      genre: getPreferredGenre(metadata),
+      language: metadata.common.language?.trim() ?? '',
       comment,
+      customTags: extractNativeTagValue(metadata, 'CUSTOM_TAGS'),
       createTime: stats?.birthtimeMs ?? null,
       modifyTime: stats?.mtimeMs ?? null,
       fileSize: stats?.size ?? null,
@@ -162,11 +164,13 @@ const detailCommonFieldNames = new Set([
   'picture',
   'year',
   'track',
-  'disk',
+  'disc',
   'date',
   'genre',
+  'language',
   'comment',
   'lyrics',
+  'custom_tags',
 ])
 
 const stringifyDetailValue = (value: unknown): string => {
@@ -195,6 +199,45 @@ const createDetailField = (label: string, value: unknown): LocalMusicDetailField
     label,
     value: text || EMPTY_DETAIL_VALUE,
   }
+}
+
+const extractNativeTagValue = (metadata: IAudioMetadata | null, tagId: string) => {
+  if (!metadata?.native) return ''
+  const target = tagId.toUpperCase()
+  for (const tags of Object.values(metadata.native)) {
+    if (!Array.isArray(tags)) continue
+    for (const tag of tags) {
+      const id = `${tag.id ?? ''}`.toUpperCase()
+      if (id === target || id.endsWith(`:${target}`) || id.endsWith(`/${target}`)) {
+        return stringifyDetailValue(tag.value)
+      }
+      if (id.includes('TXXX') || id.includes('USERDEFINEDTEXT')) {
+        const value = tag.value as { description?: string, text?: string, value?: string } | string
+        if (typeof value == 'object' && value && `${value.description ?? ''}`.toUpperCase() === target) {
+          return stringifyDetailValue(value.text ?? value.value)
+        }
+      }
+    }
+  }
+  return ''
+}
+
+/** 优先取 ID3v2/Vorbis 流派，避免 APEv2/ID3v1 旧值盖住已写入的文本流派 */
+const getPreferredGenre = (metadata: IAudioMetadata | null) => {
+  if (!metadata) return ''
+  const native = metadata.native ?? {}
+  for (const fmt of ['ID3v2.4', 'ID3v2.3', 'ID3v2.2', 'vorbis'] as const) {
+    const tags = native[fmt]
+    if (!Array.isArray(tags)) continue
+    for (const tag of tags) {
+      const id = `${tag.id ?? ''}`.toUpperCase()
+      if (id === 'TCON' || id === 'TCO' || id === 'GENRE' || id.endsWith(':GENRE') || id.endsWith('/GENRE')) {
+        const text = stringifyDetailValue(tag.value)
+        if (text) return text
+      }
+    }
+  }
+  return metadata.common.genre?.map(item => item.trim()).filter(Boolean).join(' / ') ?? ''
 }
 
 const getDetailCoverUrl = async(path: string) => {
@@ -295,10 +338,12 @@ export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDe
       createDetailField('专辑名', common?.album),
       createDetailField('时长', format?.duration ? formatPlayTime(format.duration) : ''),
       createDetailField('年代', common?.year),
-      createDetailField('音轨号', formatTrackDisk(common?.track)),
-      createDetailField('碟号', formatTrackDisk(common?.disk)),
-      createDetailField('流派', common?.genre?.join(' / ')),
+      createDetailField('音轨号', formatTrackDisc(common?.track)),
+      createDetailField('碟号', formatTrackDisc(common?.disk)),
+      createDetailField('流派', getPreferredGenre(metadata)),
+      createDetailField('语种', common?.language || extractNativeTagValue(metadata, 'LANGUAGE') || extractNativeTagValue(metadata, 'TLAN')),
       createDetailField('注释', comment),
+      createDetailField('自定义标签', extractNativeTagValue(metadata, 'CUSTOM_TAGS')),
     ],
     audioInfo: [
       createDetailField('采样率', format?.sampleRate ? `${format.sampleRate} Hz` : ''),
@@ -312,6 +357,174 @@ export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDe
     coverUrl,
     coverInfo,
     lyric: lyricInfo?.lyric?.trim() ?? '',
+  }
+}
+
+export const LOCAL_MUSIC_EDITABLE_EXTS = new Set(['mp3', 'flac'])
+
+export const isLocalMusicMetaEditable = (filePath: string) => {
+  return LOCAL_MUSIC_EDITABLE_EXTS.has(extname(filePath).replace(/^\./, '').toLowerCase())
+}
+
+export const clearLocalMusicMetadataCache = (filePath?: string) => {
+  if (!filePath || prevFileInfo.path === filePath) {
+    prevFileInfo = {
+      path: '',
+      promise: Promise.resolve(null),
+    }
+  }
+}
+
+const guessTitleArtistFromFileName = (filePath: string) => {
+  const name = basename(filePath, extname(filePath)).trim()
+  const matched = name.match(/^(.*?)\s*[-–—_]\s*(.+)$/)
+  if (!matched) {
+    return {
+      title: name,
+      artist: '',
+    }
+  }
+  return {
+    artist: matched[1].trim(),
+    title: matched[2].trim(),
+  }
+}
+
+export interface LocalMusicEditInfo {
+  filePath: string
+  ext: string
+  title: string
+  artist: string
+  album: string
+  year: string
+  track: string
+  disc: string
+  genre: string
+  language: string
+  comment: string
+  customTags: string
+  lyrics: string
+  coverUrl: string
+  coverSource: string
+  coverInfo: LocalMusicDetailField[]
+  fileMetaInfo: LocalMusicDetailField[]
+}
+
+export const getCoverInfoFromSource = async(source: string): Promise<LocalMusicDetailField[]> => {
+  const coverSource = source.trim()
+  if (!coverSource) return []
+
+  try {
+    const imageSize = (await import('image-size')).default
+
+    if (/^data:image\//i.test(coverSource)) {
+      const matched = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(coverSource)
+      if (!matched) return [createDetailField('类型', 'DATA')]
+      const buffer = Buffer.from(matched[2], 'base64')
+      const size = imageSize(buffer)
+      const type = matched[1].replace(/^image\//i, '').toUpperCase()
+      return [
+        createDetailField('类型', type || size.type?.toUpperCase()),
+        createDetailField('尺寸', size.width && size.height ? `${size.width} × ${size.height}` : ''),
+        createDetailField('大小', `${sizeFormate(buffer.length)} (${buffer.length} B)`),
+      ]
+    }
+
+    if (/^https?:\/\//i.test(coverSource)) {
+      try {
+        const response = await fetch(coverSource)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const buffer = Buffer.from(await response.arrayBuffer())
+        const size = imageSize(buffer)
+        const contentType = response.headers.get('content-type') ?? ''
+        const type = contentType.replace(/^image\//i, '').toUpperCase() ||
+          extname(coverSource.split('?')[0] ?? '').replace(/^\./, '').toUpperCase() ||
+          size.type?.toUpperCase()
+        return [
+          createDetailField('类型', type),
+          createDetailField('尺寸', size.width && size.height ? `${size.width} × ${size.height}` : ''),
+          createDetailField('大小', `${sizeFormate(buffer.length)} (${buffer.length} B)`),
+        ]
+      } catch (err) {
+        console.log(err)
+        const type = extname(coverSource.split('?')[0] ?? '').replace(/^\./, '').toUpperCase()
+        return [
+          createDetailField('类型', type || 'URL'),
+          createDetailField('尺寸', ''),
+          createDetailField('大小', ''),
+        ]
+      }
+    }
+
+    if (!await checkPath(coverSource)) return []
+    const stats = await getFileStats(coverSource)
+    const size = imageSize(coverSource)
+    const type = extname(coverSource).replace(/^\./, '').toUpperCase() || (size.type?.toUpperCase() ?? '')
+    return [
+      createDetailField('类型', type),
+      createDetailField('尺寸', size.width && size.height ? `${size.width} × ${size.height}` : ''),
+      createDetailField('大小', stats ? `${sizeFormate(stats.size)} (${stats.size} B)` : ''),
+    ]
+  } catch (err) {
+    console.log(err)
+    return []
+  }
+}
+
+export const getLocalMusicEditInfo = async(filePath: string): Promise<LocalMusicEditInfo | null> => {
+  if (!await checkPath(filePath)) return null
+  clearLocalMusicMetadataCache(filePath)
+
+  const [metadata, lyricInfo, picture, stats] = await Promise.all([
+    getFileMetadata(filePath),
+    getLocalMusicFileLyric(filePath),
+    getLocalMusicFilePic(filePath),
+    getFileStats(filePath),
+  ])
+  const common = metadata?.common
+  const format = metadata?.format
+  const guessed = guessTitleArtistFromFileName(filePath)
+  const title = stringifyDetailValue(common?.title) || guessed.title
+  const artist = stringifyDetailValue(common?.artists?.join('、') || common?.artist) || guessed.artist
+  const customTags = extractNativeTagValue(metadata, 'CUSTOM_TAGS')
+
+  let coverUrl = ''
+  let coverSource = ''
+  if (typeof picture == 'string') {
+    coverSource = picture
+    coverUrl = encodePath(picture)
+  } else if (picture) {
+    coverSource = `data:${picture.format};base64,${Buffer.from(picture.data).toString('base64')}`
+    coverUrl = coverSource
+  }
+  const coverInfo = await getCoverInfoFromSource(coverSource)
+
+  return {
+    filePath,
+    ext: extname(filePath).replace(/^\./, '').toLowerCase(),
+    title,
+    artist,
+    album: stringifyDetailValue(common?.album),
+    year: stringifyDetailValue(common?.year),
+    track: formatTrackDisc(common?.track) ?? '',
+    disc: formatTrackDisc(common?.disk) ?? '',
+    genre: getPreferredGenre(metadata),
+    language: stringifyDetailValue(common?.language) ||
+      extractNativeTagValue(metadata, 'LANGUAGE') ||
+      extractNativeTagValue(metadata, 'TLAN'),
+    comment: common?.comment?.map(item => stringifyDetailValue(item)).filter(Boolean).join('\n') ?? '',
+    customTags,
+    lyrics: lyricInfo?.lyric?.trim() ?? '',
+    coverUrl,
+    coverSource,
+    coverInfo,
+    fileMetaInfo: [
+      createDetailField('时长', format?.duration ? formatPlayTime(format.duration) : ''),
+      createDetailField('文件大小', stats ? `${sizeFormate(stats.size)} (${stats.size} B)` : ''),
+      createDetailField('标签类型', format?.tagTypes?.join(', ')),
+      createDetailField('创建时间', stats ? dateFormat(stats.birthtimeMs) : ''),
+      createDetailField('修改时间', stats ? dateFormat(stats.mtimeMs) : ''),
+    ],
   }
 }
 /**

@@ -1,12 +1,25 @@
 import { httpFetch } from '../../request'
 import { sizeFormate, formatPlayTime } from '../../index'
-import { toMD5, formatSingerName } from '../utils'
+import { toMD5, formatGenre, formatSingerName, parseTagListMeta } from '../utils'
+import { createHttpFetch } from './utils'
 
 export const createSignature = (time, str) => {
   const deviceId = '963B7AA0D21511ED807EE5846EC87D20'
   const signatureMd5 = '6cdc72a439cef99a3418d2a78aa28c73'
   const sign = toMD5(`${str}${signatureMd5}yyapp2d16148780a1dcc7408e06336b98cfd50${deviceId}${time}`)
   return { sign, deviceId }
+}
+
+const fetchSongExtraMeta = async(songId) => {
+  if (!songId) return { genre: '', language: '' }
+  const data = await createHttpFetch('https://c.musicapp.migu.cn/MIGUM2.0/v1.0/content/resourceinfo.do?resourceType=2', {
+    method: 'POST',
+    form: {
+      resourceId: `${songId}`,
+    },
+  })
+  const resource = Array.isArray(data?.resource) ? data.resource[0] : (Array.isArray(data) ? data[0] : data)
+  return parseTagListMeta(resource?.tagList)
 }
 
 export default {
@@ -187,6 +200,11 @@ export default {
           lrcUrl: data.lrcUrl,
           mrcUrl: data.mrcurl,
           trcUrl: data.trcUrl,
+          year: `${data.publishDate || data.publishTime || data.songPublishTime || ''}`.replace(/\D/g, '').slice(0, 4),
+          track: (data.track || data.trackNo || data.songTrack) ? `${data.track || data.trackNo || data.songTrack}` : '',
+          disc: (data.disc || data.discNo || data.cd) ? `${data.disc || data.discNo || data.cd}` : '',
+          genre: formatGenre(data.genre, data.songGenre, data.songTypeName),
+          language: formatGenre(data.language, data.lan, data.songLanguage),
           types,
           _types,
           typeUrl: {},
@@ -195,29 +213,41 @@ export default {
     })
     return list
   },
-  search(str, page = 1, limit, retryNum = 0) {
+  async attachExtraMeta(list) {
+    if (!Array.isArray(list) || !list.length) return list
+    await Promise.all(list.map(async(item) => {
+      if (item.genre && item.language) return
+      try {
+        const { genre, language } = await fetchSongExtraMeta(item.songmid)
+        if (!item.genre && genre) item.genre = genre
+        if (!item.language && language) item.language = language
+      } catch (err) {
+        console.log(err)
+      }
+    }))
+    return list
+  },
+  async search(str, page = 1, limit, retryNum = 0) {
     if (++retryNum > 3) return Promise.reject(new Error('try max num'))
     if (limit == null) limit = this.limit
-    // http://newlyric.kuwo.cn/newlyric.lrc?62355680
-    return this.musicSearch(str, page, limit).then(result => {
-      // console.log(result)
-      if (!result || result.code !== '000000') return Promise.reject(new Error(result ? result.info : '搜索失败'))
-      const songResultData = result.songResultData || { resultList: [], totalCount: 0 }
+    const result = await this.musicSearch(str, page, limit)
+    if (!result || result.code !== '000000') return Promise.reject(new Error(result ? result.info : '搜索失败'))
+    const songResultData = result.songResultData || { resultList: [], totalCount: 0 }
 
-      let list = this.filterData(songResultData.resultList)
-      if (list == null) return this.search(str, page, limit, retryNum)
+    let list = this.filterData(songResultData.resultList)
+    if (list == null) return this.search(str, page, limit, retryNum)
+    list = await this.attachExtraMeta(list)
 
-      this.total = parseInt(songResultData.totalCount)
-      this.page = page
-      this.allPage = Math.ceil(this.total / limit)
+    this.total = parseInt(songResultData.totalCount)
+    this.page = page
+    this.allPage = Math.ceil(this.total / limit)
 
-      return {
-        list,
-        allPage: this.allPage,
-        limit,
-        total: this.total,
-        source: 'mg',
-      }
-    })
+    return {
+      list,
+      allPage: this.allPage,
+      limit,
+      total: this.total,
+      source: 'mg',
+    }
   },
 }

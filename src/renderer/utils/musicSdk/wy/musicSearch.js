@@ -3,6 +3,38 @@
 import { sizeFormate, formatPlayTime } from '../../index'
 // import musicDetailApi from './musicDetail'
 import { eapiRequest } from './utils/index'
+import { formatGenre } from '../utils'
+import { httpFetch } from '../../request'
+import { weapi } from './utils/crypto'
+
+const fetchSongExtraMeta = async(songId) => {
+  if (!songId) return { genre: '', language: '' }
+  const requestObj = httpFetch('https://music.163.com/weapi/song/play/about/block/page', {
+    method: 'post',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
+      Referer: `https://music.163.com/song?id=${songId}`,
+      origin: 'https://music.163.com',
+    },
+    form: weapi({ songId: `${songId}` }),
+  })
+  const { body } = await requestObj.promise
+  if (body?.code !== 200) return { genre: '', language: '' }
+  const blocks = body?.data?.blocks || []
+  const basic = blocks.find(block => block?.code === 'SONG_PLAY_ABOUT_SONG_BASIC')
+  const creatives = basic?.creatives || []
+  const songTag = creatives.find(item => item?.creativeType === 'songTag')
+  const languageCreative = creatives.find(item => item?.creativeType === 'language')
+  const genre = formatGenre(
+    songTag?.resources?.[0]?.uiElement?.mainTitle?.title,
+    songTag?.uiElement?.mainTitle?.title,
+  )
+  const language = formatGenre(
+    languageCreative?.uiElement?.textLinks?.[0]?.text,
+    languageCreative?.resources?.[0]?.uiElement?.mainTitle?.title,
+  )
+  return { genre, language }
+}
 
 export default {
   limit: 30,
@@ -75,6 +107,12 @@ export default {
 
       types.reverse()
 
+      const publishTime = item.publishTime || item.al?.publishTime
+      let year = ''
+      if (typeof publishTime == 'number' && publishTime > 0) {
+        year = `${new Date(publishTime).getFullYear()}`
+      }
+
       return {
         singer: this.getSinger(item.ar),
         name: item.name,
@@ -85,35 +123,50 @@ export default {
         songmid: item.id,
         img: item.al.picUrl,
         lrc: null,
+        year,
+        track: item.no > 0 ? `${item.no}` : '',
+        disc: item.cd && item.cd !== 'null' ? `${item.cd}` : '',
+        genre: formatGenre(item.genre, item.al?.genre, item.al?.genres),
+        language: formatGenre(item.language, item.lan),
         types,
         _types,
         typeUrl: {},
       }
     })
   },
-  search(str, page = 1, limit, retryNum = 0) {
+  async attachExtraMeta(list) {
+    if (!Array.isArray(list) || !list.length) return list
+    await Promise.all(list.map(async(item) => {
+      if (item.genre && item.language) return
+      try {
+        const { genre, language } = await fetchSongExtraMeta(item.songmid)
+        if (!item.genre && genre) item.genre = genre
+        if (!item.language && language) item.language = language
+      } catch (err) {
+        console.log(err)
+      }
+    }))
+    return list
+  },
+  async search(str, page = 1, limit, retryNum = 0) {
     if (++retryNum > 3) return Promise.reject(new Error('try max num'))
     if (limit == null) limit = this.limit
-    return this.musicSearch(str, page, limit).then(result => {
-      // console.log(result)
-      if (!result || result.code !== 200) return this.search(str, page, limit, retryNum)
-      let list = this.handleResult(result.data.resources || [])
-      // console.log(list)
+    const result = await this.musicSearch(str, page, limit)
+    if (!result || result.code !== 200) return this.search(str, page, limit, retryNum)
+    let list = this.handleResult(result.data.resources || [])
+    if (list == null) return this.search(str, page, limit, retryNum)
+    list = await this.attachExtraMeta(list)
 
-      if (list == null) return this.search(str, page, limit, retryNum)
+    this.total = result.data.totalCount || 0
+    this.page = page
+    this.allPage = Math.ceil(this.total / this.limit)
 
-      this.total = result.data.totalCount || 0
-      this.page = page
-      this.allPage = Math.ceil(this.total / this.limit)
-
-      return {
-        list,
-        allPage: this.allPage,
-        limit: this.limit,
-        total: this.total,
-        source: 'wy',
-      }
-      // return result.data
-    })
+    return {
+      list,
+      allPage: this.allPage,
+      limit: this.limit,
+      total: this.total,
+      source: 'wy',
+    }
   },
 }

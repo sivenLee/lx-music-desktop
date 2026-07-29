@@ -1,6 +1,40 @@
+import { httpFetch } from '../../request'
 import { formatPlayTime, sizeFormate } from '../../index'
-import { formatSingerName } from '../utils'
+import { formatGenre, formatSingerName } from '../utils'
 import { signRequest } from './utils'
+
+const fetchSongExtraMeta = async(songmid) => {
+  if (!songmid) return { genre: '', language: '' }
+  const requestObj = httpFetch('https://u.y.qq.com/cgi-bin/musicu.fcg', {
+    method: 'post',
+    headers: {
+      Referer: 'https://y.qq.com',
+      'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
+    },
+    body: {
+      comm: {
+        ct: '19',
+        cv: '1859',
+        uin: '0',
+      },
+      req: {
+        module: 'music.pf_song_detail_svr',
+        method: 'get_song_detail_yqq',
+        param: {
+          song_type: 0,
+          song_mid: songmid,
+        },
+      },
+    },
+  })
+  const { body } = await requestObj.promise
+  if (body?.code != 0 || body?.req?.code != 0) return { genre: '', language: '' }
+  const info = body.req?.data?.info
+  return {
+    genre: formatGenre(info?.genre?.content, body.req?.data?.track_info?.label),
+    language: formatGenre(info?.lan?.content),
+  }
+}
 
 export default {
   limit: 50,
@@ -138,6 +172,12 @@ export default {
         img: (albumId === '' || albumId === '空')
           ? item.singer?.length ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${item.singer[0].mid}.jpg` : ''
           : `https://y.gtimg.cn/music/photo_new/T002R500x500M000${albumId}.jpg`,
+        year: `${item.time_public || item.album?.time_public || ''}`.slice(0, 4),
+        track: item.index_album > 0 ? `${item.index_album}` : '',
+        // QQ 的 index_cd 从 0 起，展示为碟号时 +1
+        disc: item.index_cd == null || item.index_cd === '' ? '' : `${Number(item.index_cd) + 1}`,
+        genre: formatGenre(item.genre, item.label, item.album?.genre),
+        language: formatGenre(item.lan, item.language, item.album?.lan),
         types,
         _types,
         typeUrl: {},
@@ -146,23 +186,35 @@ export default {
     // console.log(list)
     return list
   },
-  search(str, page = 1, limit) {
+  async attachExtraMeta(list) {
+    if (!Array.isArray(list) || !list.length) return list
+    await Promise.all(list.map(async(item) => {
+      if (item.genre && item.language) return
+      try {
+        const { genre, language } = await fetchSongExtraMeta(item.songmid)
+        if (!item.genre && genre) item.genre = genre
+        if (!item.language && language) item.language = language
+      } catch (err) {
+        console.log(err)
+      }
+    }))
+    return list
+  },
+  async search(str, page = 1, limit) {
     if (limit == null) limit = this.limit
-    // http://newlyric.kuwo.cn/newlyric.lrc?62355680
-    return this.musicSearch(str, page, limit).then(({ body, meta }) => {
-      let list = this.handleResult(body.item_song)
+    const { body, meta } = await this.musicSearch(str, page, limit)
+    const list = await this.attachExtraMeta(this.handleResult(body.item_song))
 
-      this.total = meta.estimate_sum
-      this.page = page
-      this.allPage = Math.ceil(this.total / limit)
+    this.total = meta.estimate_sum
+    this.page = page
+    this.allPage = Math.ceil(this.total / limit)
 
-      return Promise.resolve({
-        list,
-        allPage: this.allPage,
-        limit,
-        total: this.total,
-        source: 'tx',
-      })
-    })
+    return {
+      list,
+      allPage: this.allPage,
+      limit,
+      total: this.total,
+      source: 'tx',
+    }
   },
 }

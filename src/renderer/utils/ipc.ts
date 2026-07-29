@@ -995,3 +995,15 @@ export const localMusicSavePlaylistOrder = async(params: {
     playlistFiles: string[]
   }, string[]>(LOCAL_MUSIC_EVENT_NAME.save_playlist_order, params)
 }
+
+export const localMusicWriteMusicMeta = async(params: {
+  dirPath: string
+  filePath: string
+  meta: LX.Music.MusicFileMeta
+}): Promise<LX.Music.MusicInfoLocal> => {
+  return rendererInvoke<{
+    dirPath: string
+    filePath: string
+    meta: LX.Music.MusicFileMeta
+  }, LX.Music.MusicInfoLocal>(LOCAL_MUSIC_EVENT_NAME.write_music_meta, params)
+}

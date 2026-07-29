@@ -4,9 +4,16 @@
       <transition enter-active-class="animated fadeIn" leave-active-class="animated fadeOut">
         <div v-show="showContent" :class="[$style.modal, {[$style.filter]: filter}]" @click="bgClose && close()">
           <transition :enter-active-class="inClass" :leave-active-class="outClass" @after-enter="$emit('after-enter', $event)" @after-leave="handleAfterLeave">
-            <div v-show="showContent" :class="$style.content" :style="contentStyle" @click.stop>
-              <header :class="$style.header">
-                <button v-if="closeBtn" type="button" @click="close">
+            <div
+              v-show="showContent"
+              ref="dom_content"
+              :class="[$style.content, {[$style.dragging]: isDragging}]"
+              :style="contentStyle"
+              @click.stop
+              @mousedown="handleContentMouseDown"
+            >
+              <header :class="[$style.header, {[$style.movableHeader]: movable}]" data-modal-drag>
+                <button v-if="closeBtn" type="button" data-no-drag @click="close" @mousedown.stop>
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="100%" viewBox="0 0 212.982 212.982" space="preserve">
                     <use xlink:href="#icon-delete" />
                   </svg>
@@ -38,6 +45,10 @@ export default {
       default: true,
     },
     bgClose: {
+      type: Boolean,
+      default: false,
+    },
+    movable: {
       type: Boolean,
       default: false,
     },
@@ -146,17 +157,34 @@ export default {
       modalCount: false,
       isAddedClass: false,
       // ai: 0,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      isDragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragOriginX: 0,
+      dragOriginY: 0,
+      dragBaseLeft: 0,
+      dragBaseTop: 0,
+      dragWidth: 0,
+      dragHeight: 0,
     }
   },
   computed: {
     contentStyle() {
-      return {
+      const style = {
         maxWidth: this.maxWidth,
         minWidth: this.minWidth,
         width: this.width,
         height: this.height,
         maxHeight: this.maxHeight,
       }
+      if (this.movable && (this.dragOffsetX || this.dragOffsetY)) {
+        // 用 left/top 避免与进场动画的 transform 冲突
+        style.left = `${this.dragOffsetX}px`
+        style.top = `${this.dragOffsetY}px`
+      }
+      return style
     },
     filter() {
       return this.teleport == '#root' || this.modalCount > 1
@@ -171,7 +199,16 @@ export default {
     if (this.show) this.handleShowChange(true)
     this.setRandomAnimation()
   },
+  created() {
+    this.onDragMove = (event) => {
+      this.handleDragMove(event)
+    }
+    this.onDragEnd = () => {
+      this.handleDragEnd()
+    }
+  },
   beforeUnmount() {
+    this.removeDragListeners()
     this.removeClass()
   },
   methods: {
@@ -181,6 +218,7 @@ export default {
         // if (dom) {
         //   // dom.t
         // }
+        this.resetDragOffset()
         this.setRandomAnimation()
         this.modalCount = ++modalCount
         this.showModal = true
@@ -194,6 +232,7 @@ export default {
         })
       } else {
         if (modalCount > 0) this.modalCount = --modalCount
+        this.removeDragListeners()
         this.removeClass()
         this.showContent = false
       }
@@ -220,6 +259,75 @@ export default {
     handleAfterLeave(event) {
       this.$emit('after-leave', event)
       this.showModal = false
+      this.resetDragOffset()
+    },
+    resetDragOffset() {
+      this.dragOffsetX = 0
+      this.dragOffsetY = 0
+      this.isDragging = false
+    },
+    handleContentMouseDown(event) {
+      if (!this.movable || event.button !== 0) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('[data-no-drag], button, input, textarea, select, a, label')) return
+      if (!target.closest('[data-modal-drag]')) return
+      this.startDrag(event)
+    },
+    startDrag(event) {
+      const content = this.$refs.dom_content
+      if (!content) return
+      const rect = content.getBoundingClientRect()
+      this.isDragging = true
+      this.dragStartX = event.clientX
+      this.dragStartY = event.clientY
+      this.dragOriginX = this.dragOffsetX
+      this.dragOriginY = this.dragOffsetY
+      this.dragBaseLeft = rect.left - this.dragOffsetX
+      this.dragBaseTop = rect.top - this.dragOffsetY
+      this.dragWidth = rect.width
+      this.dragHeight = rect.height
+      document.addEventListener('mousemove', this.onDragMove)
+      document.addEventListener('mouseup', this.onDragEnd)
+      event.preventDefault()
+    },
+    handleDragMove(event) {
+      if (!this.isDragging) return
+      const container = this.$refs.dom_container
+      if (!container) return
+
+      let nextX = this.dragOriginX + (event.clientX - this.dragStartX)
+      let nextY = this.dragOriginY + (event.clientY - this.dragStartY)
+
+      // 保证弹窗至少留出一部分在可视区域内
+      const minVisible = 48
+      const containerRect = container.getBoundingClientRect()
+      const left = this.dragBaseLeft + nextX
+      const top = this.dragBaseTop + nextY
+      const right = left + this.dragWidth
+      const bottom = top + this.dragHeight
+
+      if (right < containerRect.left + minVisible) {
+        nextX += (containerRect.left + minVisible) - right
+      } else if (left > containerRect.right - minVisible) {
+        nextX += (containerRect.right - minVisible) - left
+      }
+      if (bottom < containerRect.top + minVisible) {
+        nextY += (containerRect.top + minVisible) - bottom
+      } else if (top > containerRect.bottom - minVisible) {
+        nextY += (containerRect.bottom - minVisible) - top
+      }
+
+      this.dragOffsetX = nextX
+      this.dragOffsetY = nextY
+    },
+    handleDragEnd() {
+      this.isDragging = false
+      this.removeDragListeners()
+    },
+    removeDragListeners() {
+      document.removeEventListener('mousemove', this.onDragMove)
+      document.removeEventListener('mouseup', this.onDragEnd)
     },
   },
 }
@@ -280,6 +388,10 @@ export default {
   flex-flow: column nowrap;
   z-index: 100;
   background-color: var(--color-content-background);
+
+  &.dragging {
+    user-select: none;
+  }
 }
 
 .header {
@@ -289,6 +401,11 @@ export default {
   align-items: center;
   justify-content: flex-end;
   height: 18px;
+
+  &.movableHeader {
+    height: 22px;
+    cursor: move;
+  }
 
   button {
     border: none;

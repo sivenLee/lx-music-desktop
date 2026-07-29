@@ -11,8 +11,9 @@ export type LocalMusicColumnKey =
   | 'duration'
   | 'year'
   | 'track'
-  | 'disk'
+  | 'disc'
   | 'genre'
+  | 'language'
   | 'comment'
   | 'customTag'
   | 'createTime'
@@ -50,10 +51,11 @@ export const LOCAL_MUSIC_COLUMNS: LocalMusicColumnDefinition[] = [
   { key: 'duration', label: '时长', width: 104, sortable: true, defaultVisible: true, align: 'center' },
   { key: 'year', label: '年代', width: 88, sortable: true, defaultVisible: true, align: 'center' },
   { key: 'track', label: '音轨号', width: 88, sortable: true, align: 'center' },
-  { key: 'disk', label: '碟号', width: 88, sortable: true, align: 'center' },
+  { key: 'disc', label: '碟号', width: 88, sortable: true, align: 'center' },
   { key: 'genre', label: '流派', width: 140 },
+  { key: 'language', label: '语种', width: 100 },
   { key: 'comment', label: '注释', width: 220 },
-  { key: 'customTag', label: '自定义标签', width: 120, align: 'center' },
+  { key: 'customTag', label: '自定义标签', width: 160 },
   { key: 'createTime', label: '创建时间', width: 170, sortable: true },
   { key: 'modifyTime', label: '修改时间', width: 170, sortable: true, defaultVisible: true },
   { key: 'fileType', label: '文件类型', width: 100, sortable: true, align: 'center' },
@@ -81,9 +83,11 @@ export const SELECTABLE_COLUMNS = LOCAL_MUSIC_COLUMNS.filter(column => !column.f
 
 export const normalizeSelectedColumnKeys = (columnKeys: string[] | null | undefined): LocalMusicColumnKey[] => {
   const allowedColumnKeys = new Set(SELECTABLE_COLUMNS.map(column => column.key))
-  const normalized = (columnKeys ?? []).filter((key): key is LocalMusicColumnKey => {
-    return allowedColumnKeys.has(key as LocalMusicColumnKey)
-  })
+  const normalized = (columnKeys ?? [])
+    .map(key => (key === 'disk' ? 'disc' : key))
+    .filter((key): key is LocalMusicColumnKey => {
+      return allowedColumnKeys.has(key as LocalMusicColumnKey)
+    })
   return normalized.length ? normalized : [...DEFAULT_VISIBLE_COLUMN_KEYS]
 }
 
@@ -93,7 +97,8 @@ export const normalizeSortState = (
   key: LocalMusicColumnKey | null
   order: SortOrder
 } => {
-  const key = value?.key
+  const rawKey = value?.key === 'disk' ? 'disc' : value?.key
+  const key = rawKey
   if (!key) {
     return {
       key: null,
@@ -137,8 +142,8 @@ export const getMusicSortValue = (musicInfo: LX.Music.MusicInfoLocal, key: Local
       return musicInfo.meta.year ?? -1
     case 'track':
       return musicInfo.meta.track ?? ''
-    case 'disk':
-      return musicInfo.meta.disk ?? ''
+    case 'disc':
+      return musicInfo.meta.disc ?? ''
     case 'createTime':
       return musicInfo.meta.createTime ?? -1
     case 'modifyTime':
@@ -176,14 +181,16 @@ export const getMusicColumnText = (musicInfo: LX.Music.MusicInfoLocal, key: Loca
       return formatMusicColumnText(musicInfo.meta.year)
     case 'track':
       return formatMusicColumnText(musicInfo.meta.track)
-    case 'disk':
-      return formatMusicColumnText(musicInfo.meta.disk)
+    case 'disc':
+      return formatMusicColumnText(musicInfo.meta.disc)
     case 'genre':
       return formatMusicColumnText(musicInfo.meta.genre)
+    case 'language':
+      return formatMusicColumnText(musicInfo.meta.language)
     case 'comment':
       return formatMusicColumnText(musicInfo.meta.comment)
     case 'customTag':
-      return '待实现'
+      return formatMusicColumnText(musicInfo.meta.customTags)
     case 'createTime':
       return musicInfo.meta.createTime ? dateFormat(musicInfo.meta.createTime) : EMPTY_CELL_VALUE
     case 'modifyTime':

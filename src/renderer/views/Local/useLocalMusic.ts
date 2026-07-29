@@ -562,6 +562,18 @@ export function useLocalMusic() {
     }
   }
 
+  const applyUpdatedMusicInfo = (musicInfo: LX.Music.MusicInfoLocal) => {
+    const replaceInList = (list: LX.Music.MusicInfoLocal[]) => {
+      const index = list.findIndex(item => item.meta.filePath === musicInfo.meta.filePath || item.id === musicInfo.id)
+      if (index < 0) return list
+      const next = [...list]
+      next[index] = musicInfo
+      return next
+    }
+    state.value.allMusicFiles = replaceInList(state.value.allMusicFiles)
+    state.value.musicFiles = replaceInList(state.value.musicFiles)
+  }
+
   return {
     state,
     filteredMusicFiles,
@@ -587,5 +599,6 @@ export function useLocalMusic() {
     removeMusicsFromPlaylist,
     removeMusicFromPlaylist,
     reorderPlaylists,
+    applyUpdatedMusicInfo,
   }
 }

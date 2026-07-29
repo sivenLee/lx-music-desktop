@@ -1,7 +1,42 @@
 import { httpFetch } from '../../request'
 import { decodeName, formatPlayTime, sizeFormate } from '../../index'
-import { formatSingerName } from '../utils'
+import { formatGenre, formatSingerName } from '../utils'
+import { createHttpFetch } from './util'
 
+const fetchSongExtraMeta = async(hash) => {
+  if (!hash) return { genre: '', language: '' }
+  const data = await createHttpFetch('http://gateway.kugou.com/v3/album_audio/audio', {
+    method: 'POST',
+    body: {
+      area_code: '1',
+      show_privilege: 1,
+      show_album_info: '1',
+      is_publish: '',
+      appid: 1005,
+      clientver: 11451,
+      mid: '1',
+      dfid: '-',
+      clienttime: Date.now(),
+      key: 'OIlwieks28dk2k092lksi2UIkp',
+      fields: 'album_info,author_name,audio_info,ori_audio_name,base,songname,language',
+      data: [{ hash }],
+    },
+    headers: {
+      'KG-THash': '13a3164',
+      'KG-RC': '1',
+      'KG-Fake': '0',
+      'KG-RF': '00869891',
+      'User-Agent': 'Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi',
+      'x-router': 'kmr.service.kugou.com',
+    },
+  })
+  const item = Array.isArray(data) ? data[0] : data
+  const info = Array.isArray(item) ? item[0] : item
+  return {
+    genre: '',
+    language: formatGenre(info?.language, info?.album_info?.language),
+  }
+}
 
 export default {
   limit: 30,
@@ -60,6 +95,11 @@ export default {
       lrc: null,
       otherSource: null,
       hash: rawData.FileHash,
+      year: `${rawData.PublishTime || rawData.publish_date || rawData.PublishDate || ''}`.slice(0, 4),
+      track: (rawData.Track || rawData.track || rawData.DiscTrack) ? `${rawData.Track || rawData.track || rawData.DiscTrack}` : '',
+      disc: (rawData.Disc || rawData.disc || rawData.DiscNumber) ? `${rawData.Disc || rawData.disc || rawData.DiscNumber}` : '',
+      genre: formatGenre(rawData.Genre, rawData.genre, rawData.ClassName),
+      language: formatGenre(rawData.Language, rawData.language),
       types,
       _types,
       typeUrl: {},
@@ -82,27 +122,38 @@ export default {
     })
     return list
   },
-  search(str, page = 1, limit, retryNum = 0) {
+  async attachExtraMeta(list) {
+    if (!Array.isArray(list) || !list.length) return list
+    await Promise.all(list.map(async(item) => {
+      if (item.language) return
+      try {
+        const { language } = await fetchSongExtraMeta(item.hash)
+        if (language) item.language = language
+      } catch (err) {
+        console.log(err)
+      }
+    }))
+    return list
+  },
+  async search(str, page = 1, limit, retryNum = 0) {
     if (++retryNum > 3) return Promise.reject(new Error('try max num'))
     if (limit == null) limit = this.limit
-    // http://newlyric.kuwo.cn/newlyric.lrc?62355680
-    return this.musicSearch(str, page, limit).then(result => {
-      if (!result || result.error_code !== 0) return this.search(str, page, limit, retryNum)
-      let list = this.handleResult(result.data.lists)
+    const result = await this.musicSearch(str, page, limit)
+    if (!result || result.error_code !== 0) return this.search(str, page, limit, retryNum)
+    let list = this.handleResult(result.data.lists)
+    if (list == null) return this.search(str, page, limit, retryNum)
+    list = await this.attachExtraMeta(list)
 
-      if (list == null) return this.search(str, page, limit, retryNum)
+    this.total = result.data.total
+    this.page = page
+    this.allPage = Math.ceil(this.total / limit)
 
-      this.total = result.data.total
-      this.page = page
-      this.allPage = Math.ceil(this.total / limit)
-
-      return Promise.resolve({
-        list,
-        allPage: this.allPage,
-        limit,
-        total: this.total,
-        source: 'kg',
-      })
-    })
+    return {
+      list,
+      allPage: this.allPage,
+      limit,
+      total: this.total,
+      source: 'kg',
+    }
   },
 }

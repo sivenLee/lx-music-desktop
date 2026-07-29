@@ -3,11 +3,63 @@ const fsPromises = fs.promises
 const path = require('path')
 const getImgSize = require('image-size')
 const download = require('./downloader')
+const removeApeTags = require('./removeApeTags')
 
 const FlacProcessor = require('./flac-metadata/index')
 
 const extReg = /^(\.(?:jpe?g|png)).*$/
 const vendor = 'reference libFLAC 1.2.1 20070917'
+
+const buildVorbisMeta = (meta) => {
+  const comments = {}
+  const set = (key, value) => {
+    if (value == null) return
+    const text = `${value}`.trim()
+    if (!text) return
+    comments[key] = text
+  }
+  set('TITLE', meta.title)
+  set('ARTIST', meta.artist)
+  set('ALBUM', meta.album)
+  set('DATE', meta.year)
+  set('TRACKNUMBER', meta.track)
+  set('DISCNUMBER', meta.disc)
+  set('GENRE', meta.genre)
+  set('LANGUAGE', meta.language)
+  set('COMMENT', meta.comment)
+  set('LYRICS', meta.lyrics)
+  set('CUSTOM_TAGS', meta.CUSTOM_TAGS)
+  return comments
+}
+
+const writeDataUrlToTemp = async(filePath, dataUrl) => {
+  const matched = /^data:(image\/(?:jpeg|jpg|png));base64,(.+)$/i.exec(dataUrl)
+  if (!matched) return null
+  const mime = matched[1].toLowerCase()
+  const ext = mime.includes('png') ? '.png' : '.jpg'
+  const picPath = `${filePath}.lxcover${ext}`
+  await fsPromises.writeFile(picPath, Buffer.from(matched[2], 'base64'))
+  return picPath
+}
+
+const resolveCoverPath = async(filePath, apic) => {
+  if (!apic) return null
+  if (/^data:image\//i.test(apic)) return writeDataUrlToTemp(filePath, apic)
+  if (!/^https?:\/\//i.test(apic)) {
+    try {
+      await fsPromises.access(apic)
+      return apic
+    } catch {
+      return null
+    }
+  }
+  let ext = path.extname(apic.split('?')[0] || '')
+  let picPath = filePath.replace(/\.flac$/i, '') + (ext ? ext.replace(extReg, '$1') : '.jpg')
+  let picUrl = apic
+  if (picUrl.includes('music.126.net')) picUrl += `${picUrl.includes('?') ? '&' : '?'}param=500y500`
+  const success = await download(picUrl, picPath)
+  return success ? picPath : null
+}
 
 const writeMeta = async(filePath, meta, picPath) => {
   const comments = Object.keys(meta).map(key => `${key.toUpperCase()}=${meta[key] || ''}`)
@@ -47,35 +99,50 @@ const writeMeta = async(filePath, meta, picPath) => {
   const flacProcessor = new FlacProcessor()
   flacProcessor.writeMeta(data)
 
-  reader.pipe(flacProcessor).pipe(writer).on('finish', () => {
-    fs.unlink(filePath, err => {
-      if (err) return console.log(err.message)
-      fs.rename(tempPath, filePath, err => {
-        if (err) console.log(err.message)
+  await new Promise((resolve, reject) => {
+    const onError = (err) => {
+      reject(err)
+    }
+    reader.on('error', onError)
+    writer.on('error', onError)
+    flacProcessor.on('error', onError)
+    reader.pipe(flacProcessor).pipe(writer).on('finish', () => {
+      fs.unlink(filePath, err => {
+        if (err) return reject(err)
+        fs.rename(tempPath, filePath, err => {
+          if (err) reject(err)
+          else resolve()
+        })
       })
     })
   })
 }
 
-module.exports = (filePath, meta, proxy) => {
-  if (!meta.APIC) return writeMeta(filePath, meta)
-  let picUrl = meta.APIC
-  delete meta.APIC
-  if (!/^http/.test(picUrl)) {
-    return writeMeta(filePath, meta)
+module.exports = async(filePath, meta, proxy) => {
+  const payload = { ...meta }
+  const apic = payload.APIC
+  delete payload.APIC
+  const vorbisMeta = buildVorbisMeta(payload)
+
+  if (!apic) {
+    await writeMeta(filePath, vorbisMeta)
+    await removeApeTags(filePath)
+    return
   }
-  let ext = path.extname(picUrl)
-  let picPath = filePath.replace(/\.flac$/, '') + (ext ? ext.replace(extReg, '$1') : '.jpg')
 
-  if (picUrl.includes('music.126.net')) picUrl += `${picUrl.includes('?') ? '&' : '?'}param=500y500`
-  download(picUrl, picPath, proxy).then(success => {
-    if (success) {
-      writeMeta(filePath, meta, picPath).finally(() => {
-        fs.unlink(picPath, err => {
-          if (err) console.log(err.message)
-        })
+  const picPath = await resolveCoverPath(filePath, apic)
+  const isTempCover = picPath && (
+    picPath.startsWith(`${filePath}.lxcover`) ||
+    /^https?:\/\//i.test(apic)
+  )
+  try {
+    await writeMeta(filePath, vorbisMeta, picPath || undefined)
+    await removeApeTags(filePath)
+  } finally {
+    if (isTempCover && picPath) {
+      fs.unlink(picPath, err => {
+        if (err) console.log(err.message)
       })
-    } else writeMeta(filePath, meta)
-  })
+    }
+  }
 }
-
