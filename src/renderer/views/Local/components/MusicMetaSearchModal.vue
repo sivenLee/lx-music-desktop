@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" movable width="960px" max-width="94%" height="78%" max-height="650px" @close="handleClose">
+  <material-modal :show="visible" movable width="960px" max-width="94%" height="78%" max-height="660px" @close="handleClose">
     <main :class="$style.modal">
       <h2 :class="$style.title" data-modal-drag>综合搜索</h2>
       <div :class="$style.searchBar">
@@ -216,7 +216,7 @@ export default {
       coverSizeMap.value = {}
       try {
         const keyword = `${name || searchAlbum.value.trim()} ${singer}`.trim()
-        const data = await api.search(keyword, 1, 10) as { list?: SearchResultItem[] } | null
+        const data = await api.search(keyword, 1, 5) as { list?: SearchResultItem[] } | null
         const albumKeyword = searchAlbum.value.trim().toLowerCase()
         const merged = (data?.list ?? []).filter(item => item?.name)
         results.value = albumKeyword

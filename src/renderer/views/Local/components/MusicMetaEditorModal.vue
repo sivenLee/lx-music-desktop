@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" movable width="920px" max-width="92%" height="78%" max-height="650px" @close="handleClose">
+  <material-modal :show="visible" movable width="920px" max-width="92%" height="78%" max-height="660px" @close="handleClose">
     <main :class="$style.modal">
       <h2 :class="$style.title" data-modal-drag>编辑元信息</h2>
       <div :class="$style.filePath" :title="form.filePath">{{ form.filePath || '-' }}</div>
@@ -10,61 +10,95 @@
         <div v-else :class="$style.body">
           <div class="scroll" :class="$style.left">
             <div :class="$style.fieldRow">
-              <label :class="$style.field">
-                <span :class="$style.label">标题</span>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.title" type="checkbox" />
+                  <span>标题</span>
+                </label>
                 <input v-model="form.title" :class="$style.input" type="text" />
-              </label>
-              <label :class="$style.field">
-                <span :class="$style.label">艺术家</span>
+              </div>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.artist" type="checkbox" />
+                  <span>艺术家</span>
+                </label>
                 <input v-model="form.artist" :class="$style.input" type="text" />
-              </label>
+              </div>
             </div>
             <div :class="$style.fieldRow">
-              <label :class="$style.field">
-                <span :class="$style.label">专辑名</span>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.album" type="checkbox" />
+                  <span>专辑名</span>
+                </label>
                 <input v-model="form.album" :class="$style.input" type="text" />
-              </label>
-              <label :class="$style.field">
-                <span :class="$style.label">年代</span>
+              </div>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.year" type="checkbox" />
+                  <span>年代</span>
+                </label>
                 <input v-model="form.year" :class="$style.input" type="text" />
-              </label>
+              </div>
             </div>
             <div :class="$style.fieldRow">
-              <label :class="$style.field">
-                <span :class="$style.label">音轨号</span>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.track" type="checkbox" />
+                  <span>音轨号</span>
+                </label>
                 <input v-model="form.track" :class="$style.input" type="text" placeholder="如 1 或 1/12" />
-              </label>
-              <label :class="$style.field">
-                <span :class="$style.label">碟号</span>
+              </div>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.disc" type="checkbox" />
+                  <span>碟号</span>
+                </label>
                 <input v-model="form.disc" :class="$style.input" type="text" placeholder="如 1 或 1/2" />
-              </label>
+              </div>
             </div>
             <div :class="$style.fieldRow">
-              <label :class="$style.field">
-                <span :class="$style.label">流派</span>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.genre" type="checkbox" />
+                  <span>流派</span>
+                </label>
                 <input v-model="form.genre" :class="$style.input" type="text" />
-              </label>
-              <label :class="$style.field">
-                <span :class="$style.label">语种</span>
+              </div>
+              <div :class="$style.field">
+                <label :class="$style.label">
+                  <input v-model="overrides.language" type="checkbox" />
+                  <span>语种</span>
+                </label>
                 <input v-model="form.language" :class="$style.input" type="text" />
-              </label>
+              </div>
             </div>
-            <label :class="$style.field">
-              <span :class="$style.label">注释</span>
+            <div :class="$style.field">
+              <label :class="$style.label">
+                <input v-model="overrides.comment" type="checkbox" />
+                <span>注释</span>
+              </label>
               <input v-model="form.comment" :class="$style.input" type="text" />
-            </label>
-            <label :class="$style.field">
-              <span :class="$style.label">歌词</span>
+            </div>
+            <div :class="$style.field">
+              <label :class="$style.label">
+                <input v-model="overrides.lyrics" type="checkbox" />
+                <span>歌词</span>
+              </label>
               <textarea v-model="form.lyrics" :class="[$style.input, $style.lyricArea]" rows="3" />
-            </label>
-            <label :class="$style.field">
-              <span :class="$style.label">自定义标签 (用#分隔)</span>
-              <textarea v-model="form.customTags" :class="[$style.input, $style.textarea]" rows="2" />
-            </label>
+            </div>
+            <div :class="$style.field">
+              <span :class="$style.labelPlain">自定义标签 (用#分隔)</span>
+              <textarea v-model="form.customTags" :class="[$style.input, $style.textarea]" rows="3" />
+            </div>
           </div>
 
           <aside :class="$style.right">
             <div :class="$style.coverWrap">
+              <label :class="$style.label">
+                <input v-model="overrides.cover" type="checkbox" />
+                <span>封面</span>
+              </label>
               <img v-if="form.coverUrl" :src="form.coverUrl" :class="$style.cover" alt="封面" />
               <div v-else :class="$style.coverEmpty">无封面</div>
               <div v-if="form.coverInfo.length" :class="$style.coverInfo">
@@ -100,6 +134,24 @@
         <div :class="$style.footerLeft">
           <button type="button" :class="$style.btn" :disabled="!canGoPrev || isSaving" @click="handlePrev">上一首</button>
           <button type="button" :class="$style.btn" :disabled="!canGoNext || isSaving" @click="handleNext">下一首</button>
+          <button type="button" :class="$style.btn" :disabled="isLoading || isSaving || !form.filePath" @click="handleReload">
+            重新加载
+          </button>
+          <button
+            type="button"
+            :class="[$style.btn, $style.overrideBtn]"
+            :disabled="isLoading || isSaving"
+            @click="handleToggleAllOverrides"
+          >
+            <input
+              ref="overrideAllCheckboxRef"
+              type="checkbox"
+              tabindex="-1"
+              :checked="isAllOverridesChecked"
+              @click.prevent
+            >
+            <span>{{ overrideSummaryText }}</span>
+          </button>
           <button type="button" :class="$style.btn" :disabled="isLoading || isSaving || !form.filePath" @click="isSearchVisible = true">
             综合搜索
           </button>
@@ -143,6 +195,23 @@ import { dialog } from '@renderer/plugins/Dialog'
 import MusicMetaSearchModal from './MusicMetaSearchModal.vue'
 import type { MusicMetaSearchResultPayload } from '../musicMetaEditTypes'
 
+const OVERRIDE_KEYS = [
+  'title',
+  'artist',
+  'album',
+  'year',
+  'track',
+  'disc',
+  'genre',
+  'language',
+  'comment',
+  'lyrics',
+  'cover',
+] as const
+
+type OverrideKey = typeof OVERRIDE_KEYS[number]
+type OverrideState = Record<OverrideKey, boolean>
+
 const createEmptyForm = (): LocalMusicEditInfo => ({
   filePath: '',
   ext: '',
@@ -162,6 +231,23 @@ const createEmptyForm = (): LocalMusicEditInfo => ({
   coverInfo: [],
   fileMetaInfo: [],
 })
+
+const createDefaultOverrides = (): OverrideState => {
+  const result: OverrideState = {
+    title: true,
+    artist: true,
+    album: true,
+    year: true,
+    track: true,
+    disc: true,
+    genre: true,
+    language: true,
+    comment: true,
+    lyrics: true,
+    cover: true,
+  }
+  return result
+}
 
 export default {
   name: 'MusicMetaEditorModal',
@@ -200,12 +286,14 @@ export default {
     }
   }) {
     const form = reactive(createEmptyForm())
+    const overrides = reactive(createDefaultOverrides())
     const isLoading = ref(false)
     const isSaving = ref(false)
     const error = ref('')
     const isSearchVisible = ref(false)
     const isDirty = ref(false)
     const suppressDirty = ref(false)
+    const overrideAllCheckboxRef = ref<HTMLInputElement | null>(null)
 
     const editableMusicList = computed(() => {
       return props.musicList.filter(item => isLocalMusicMetaEditable(item.meta.filePath))
@@ -219,6 +307,25 @@ export default {
     const canGoPrev = computed(() => currentIndex.value > 0)
     const canGoNext = computed(() => currentIndex.value >= 0 && currentIndex.value < editableMusicList.value.length - 1)
 
+    const checkedOverrideCount = computed(() => OVERRIDE_KEYS.filter(key => overrides[key]).length)
+    const isAllOverridesChecked = computed(() => checkedOverrideCount.value === OVERRIDE_KEYS.length)
+    const isNoneOverridesChecked = computed(() => checkedOverrideCount.value === 0)
+    const overrideSummaryText = computed(() => {
+      if (isNoneOverridesChecked.value) return '未选中'
+      if (isAllOverridesChecked.value) return '全部覆盖'
+      return '部分覆盖'
+    })
+
+    const resetOverrides = () => {
+      Object.assign(overrides, createDefaultOverrides())
+    }
+
+    const syncOverrideAllCheckbox = () => {
+      const checkbox = overrideAllCheckboxRef.value
+      if (!checkbox) return
+      checkbox.indeterminate = !isAllOverridesChecked.value && !isNoneOverridesChecked.value
+    }
+
     const applyForm = (info: LocalMusicEditInfo) => {
       suppressDirty.value = true
       Object.assign(form, info)
@@ -229,6 +336,7 @@ export default {
     }
 
     const loadForm = async(musicInfo: LX.Music.MusicInfoLocal | null) => {
+      resetOverrides()
       if (!musicInfo) {
         applyForm(createEmptyForm())
         error.value = ''
@@ -283,6 +391,17 @@ export default {
       void switchTo(editableMusicList.value[currentIndex.value + 1])
     }
 
+    const handleToggleAllOverrides = () => {
+      const nextChecked = !isAllOverridesChecked.value
+      for (const key of OVERRIDE_KEYS) overrides[key] = nextChecked
+    }
+
+    const handleReload = async() => {
+      if (!props.musicInfo) return
+      if (!await confirmLeaveIfNeeded()) return
+      await loadForm(props.musicInfo)
+    }
+
     const handlePickCover = async() => {
       const result = await showSelectDialog({
         title: '选择封面图片',
@@ -306,21 +425,31 @@ export default {
       isDirty.value = true
     }
 
+    const applySearchValue = (enabled: boolean, value: string | undefined, apply: (text: string) => void) => {
+      if (!enabled) return
+      const text = `${value ?? ''}`.trim()
+      if (!text) return
+      apply(text)
+    }
+
     const handleSearchSelect = async(payload: MusicMetaSearchResultPayload) => {
-      form.title = payload.title
-      form.artist = payload.artist
-      form.album = payload.album
-      if (payload.year) form.year = payload.year
-      if (payload.track) form.track = payload.track
-      if (payload.disc) form.disc = payload.disc
-      if (payload.genre) form.genre = payload.genre
-      if (payload.language) form.language = payload.language
-      if (payload.coverUrl) {
-        form.coverUrl = payload.coverUrl
-        form.coverSource = payload.coverUrl
-        form.coverInfo = await getCoverInfoFromSource(payload.coverUrl)
+      applySearchValue(overrides.title, payload.title, (text) => { form.title = text })
+      applySearchValue(overrides.artist, payload.artist, (text) => { form.artist = text })
+      applySearchValue(overrides.album, payload.album, (text) => { form.album = text })
+      applySearchValue(overrides.year, payload.year, (text) => { form.year = text })
+      applySearchValue(overrides.track, payload.track, (text) => { form.track = text })
+      applySearchValue(overrides.disc, payload.disc, (text) => { form.disc = text })
+      applySearchValue(overrides.genre, payload.genre, (text) => { form.genre = text })
+      applySearchValue(overrides.language, payload.language, (text) => { form.language = text })
+      applySearchValue(overrides.lyrics, payload.lyrics, (text) => { form.lyrics = text })
+      if (overrides.cover) {
+        const coverUrl = `${payload.coverUrl ?? ''}`.trim()
+        if (coverUrl) {
+          form.coverUrl = coverUrl
+          form.coverSource = coverUrl
+          form.coverInfo = await getCoverInfoFromSource(coverUrl)
+        }
       }
-      if (payload.lyrics) form.lyrics = payload.lyrics
       isDirty.value = true
     }
 
@@ -364,6 +493,7 @@ export default {
         isSearchVisible.value = false
         isDirty.value = false
         error.value = ''
+        resetOverrides()
         return
       }
       void loadForm(musicInfo)
@@ -374,17 +504,29 @@ export default {
       isDirty.value = true
     }, { deep: true })
 
+    watch([checkedOverrideCount, isLoading], () => {
+      void nextTick(() => {
+        syncOverrideAllCheckbox()
+      })
+    })
+
     return {
       form,
+      overrides,
       isLoading,
       isSaving,
       error,
       isSearchVisible,
       canGoPrev,
       canGoNext,
+      overrideAllCheckboxRef,
+      isAllOverridesChecked,
+      overrideSummaryText,
       handleClose,
       handlePrev,
       handleNext,
+      handleToggleAllOverrides,
+      handleReload,
       handlePickCover,
       handleClearCover,
       handleSearchSelect,
@@ -402,7 +544,7 @@ export default {
   flex-flow: column nowrap;
   height: 100%;
   min-height: 0;
-  padding: 16px 18px 18px;
+  padding: 18px 20px 20px;
   box-sizing: border-box;
 }
 
@@ -481,9 +623,26 @@ export default {
   }
 }
 
-.label {
+.label,
+.labelPlain {
   font-size: 12px;
   color: var(--color-font-label);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    margin: 0;
+    flex: none;
+    cursor: pointer;
+  }
 }
 
 .input {
@@ -506,6 +665,9 @@ export default {
 
 .coverWrap {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .cover,
@@ -531,7 +693,7 @@ export default {
 }
 
 .coverInfo {
-  margin-top: 8px;
+  margin-top: 2px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -622,7 +784,20 @@ export default {
   }
   &:disabled {
     opacity: 0.55;
-    cursor: default;
+    cursor: not-allowed;
+  }
+}
+
+.overrideBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  padding-right: 12px;
+
+  input[type='checkbox'] {
+    margin: 0;
+    pointer-events: none;
   }
 }
 
