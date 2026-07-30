@@ -64,6 +64,18 @@
     </div>
     <common-list-add-modal v-model:show="isShowListAdd" :music-info="selectedAddMusicInfo" teleport="#view" />
     <common-list-add-multiple-modal v-model:show="isShowListAddMultiple" :music-list="selectedList" teleport="#view" @confirm="removeAllSelect" />
+    <MusicDetailModal
+      v-model:visible="isMusicDetailVisible"
+      :music-info="musicDetailTarget"
+    />
+    <MusicMetaEditorModal
+      v-model:visible="isMusicMetaEditorVisible"
+      :music-info="musicMetaEditorTarget"
+      :music-list="musicMetaEditorList"
+      :dir-path="musicMetaEditorDirPath"
+      @change="handleMusicMetaEditorChange"
+      @saved="handleMusicMetaSaved"
+    />
   </div>
 </template>
 
@@ -78,12 +90,21 @@ import useMenu from './useMenu'
 import usePlay from './usePlay'
 import useTaskActions from './useTaskActions'
 import useMusicAdd from './useMusicAdd'
+import useLocalMeta from './useLocalMeta'
+import MusicDetailModal from '@renderer/views/Local/components/MusicDetailModal.vue'
+import MusicMetaEditorModal from '@renderer/views/Local/components/MusicMetaEditorModal.vue'
 import { downloadStatus } from '@renderer/store/download/state'
 import { appSetting } from '@renderer/store/setting'
 import { formatMusicName } from '@renderer/utils'
+import { dialog } from '@renderer/plugins/Dialog'
+import { isLocalMusicMetaEditable } from '@renderer/utils/music'
 
 export default {
   name: 'Download',
+  components: {
+    MusicDetailModal,
+    MusicMetaEditorModal,
+  },
   setup() {
     const listRef = ref()
     const { tabs, activeTab } = useTab()
@@ -124,6 +145,45 @@ export default {
       handleShowMusicAddModal,
     } = useMusicAdd({ selectedList, list })
 
+    const { resolveCompletedLocalMusic } = useLocalMeta({ list })
+
+    const isMusicDetailVisible = ref(false)
+    const musicDetailTarget = ref(null)
+    const isMusicMetaEditorVisible = ref(false)
+    const musicMetaEditorTarget = ref(null)
+    const musicMetaEditorList = ref([])
+    const musicMetaEditorDirPath = ref('')
+
+    const handleShowSongDetail = async(index) => {
+      const result = await resolveCompletedLocalMusic(index)
+      if (!result) return
+      musicDetailTarget.value = result.musicInfo
+      isMusicDetailVisible.value = true
+    }
+
+    const handleShowMusicMetaEditor = async(index) => {
+      const result = await resolveCompletedLocalMusic(index)
+      if (!result) return
+      if (!isLocalMusicMetaEditable(result.musicInfo.meta.filePath)) {
+        await dialog('仅支持编辑 MP3 / FLAC 格式文件')
+        return
+      }
+      musicMetaEditorTarget.value = result.musicInfo
+      musicMetaEditorList.value = result.musicList
+      musicMetaEditorDirPath.value = result.dirPath
+      isMusicMetaEditorVisible.value = true
+    }
+
+    const handleMusicMetaEditorChange = (musicInfo) => {
+      musicMetaEditorTarget.value = musicInfo
+    }
+
+    const handleMusicMetaSaved = (musicInfo) => {
+      musicMetaEditorTarget.value = musicInfo
+      const index = musicMetaEditorList.value.findIndex(item => item.meta.filePath === musicInfo.meta.filePath || item.id === musicInfo.id)
+      if (index >= 0) musicMetaEditorList.value.splice(index, 1, musicInfo)
+    }
+
     const {
       menus,
       menuLocation,
@@ -140,6 +200,8 @@ export default {
       handleShowMusicAddModal,
       handleSearch,
       handleOpenMusicDetail,
+      handleShowSongDetail,
+      handleShowMusicMetaEditor,
     })
 
     let clickTime = 0
@@ -224,6 +286,15 @@ export default {
       isShowListAdd,
       isShowListAddMultiple,
       selectedAddMusicInfo,
+
+      isMusicDetailVisible,
+      musicDetailTarget,
+      isMusicMetaEditorVisible,
+      musicMetaEditorTarget,
+      musicMetaEditorList,
+      musicMetaEditorDirPath,
+      handleMusicMetaEditorChange,
+      handleMusicMetaSaved,
 
       removeAllSelect,
 

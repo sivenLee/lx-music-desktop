@@ -2,6 +2,7 @@ import { computed, ref, shallowReactive, reactive, nextTick } from '@common/util
 import musicSdk from '@renderer/utils/musicSdk'
 import { useI18n } from '@renderer/plugins/i18n'
 import { DOWNLOAD_STATUS } from '@common/constants'
+import { isLocalMusicMetaEditable } from '@renderer/utils/music'
 
 export default ({
   handleStartTask,
@@ -13,6 +14,8 @@ export default ({
   handleShowMusicAddModal,
   handleSearch,
   handleOpenMusicDetail,
+  handleShowSongDetail,
+  handleShowMusicMetaEditor,
 }) => {
   const itemMenuControl = reactive({
     play: true,
@@ -24,6 +27,8 @@ export default ({
     search: true,
     remove: true,
     addTo: true,
+    songDetail: false,
+    editMeta: false,
   })
   const t = useI18n()
   const menuLocation = shallowReactive({ x: 0, y: 0 })
@@ -62,6 +67,16 @@ export default ({
         disabled: !itemMenuControl.addTo,
       },
       {
+        name: '歌曲详情',
+        action: 'songDetail',
+        disabled: !itemMenuControl.songDetail,
+      },
+      {
+        name: '编辑元信息',
+        action: 'editMeta',
+        disabled: !itemMenuControl.editMeta,
+      },
+      {
         name: t('list__source_detail'),
         action: 'sourceDetail',
         disabled: !itemMenuControl.sourceDetail,
@@ -81,6 +96,8 @@ export default ({
 
   const showMenu = (event, taskInfo) => {
     itemMenuControl.sourceDetail = !!musicSdk[taskInfo.metadata.musicInfo.source]?.getMusicDetailPageUrl
+    itemMenuControl.songDetail = !!taskInfo.isComplate
+    itemMenuControl.editMeta = !!(taskInfo.isComplate && isLocalMusicMetaEditable(taskInfo.metadata.filePath))
 
     if (taskInfo.isComplate) {
       itemMenuControl.play =
@@ -147,6 +164,17 @@ export default ({
         break
       case 'sourceDetail':
         handleOpenMusicDetail(index)
+        break
+      case 'songDetail':
+        handleShowSongDetail(index).catch(err => {
+          console.log(err)
+        })
+        break
+      case 'editMeta':
+        handleShowMusicMetaEditor(index).catch(err => {
+          console.log(err)
+        })
+        break
     }
   }
 

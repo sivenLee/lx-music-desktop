@@ -17,6 +17,7 @@ import { arrPush, arrUnshift, joinPath } from '@renderer/utils'
 import { DOWNLOAD_STATUS } from '@common/constants'
 import { proxy } from '../index'
 import { buildSavePath } from './utils'
+import { fetchDownloadTagMeta } from './fetchTagMeta'
 
 const waitingUpdateTasks = new Map<string, LX.Download.ListItem>()
 let timer: NodeJS.Timeout | null = null
@@ -149,32 +150,50 @@ const getProxy = () => {
 const saveMeta = (downloadInfo: LX.Download.ListItem) => {
   if (downloadInfo.metadata.quality === 'ape') return
   const isUseOtherSource = appSetting['download.isUseOtherSource']
-  const tasks: [Promise<string | null>, Promise<LX.Player.LyricInfo | null>] = [
+  const musicInfo = downloadInfo.metadata.musicInfo
+  const tasks: [Promise<string | null>, Promise<LX.Player.LyricInfo | null>, Promise<Awaited<ReturnType<typeof fetchDownloadTagMeta>>>] = [
     appSetting['download.isEmbedPic']
-      ? downloadInfo.metadata.musicInfo.meta.picUrl
-        ? Promise.resolve(downloadInfo.metadata.musicInfo.meta.picUrl)
-        : getPicUrl({ musicInfo: downloadInfo.metadata.musicInfo, isRefresh: false, allowToggleSource: isUseOtherSource }).catch(err => {
+      ? musicInfo.meta.picUrl
+        ? Promise.resolve(musicInfo.meta.picUrl)
+        : getPicUrl({ musicInfo, isRefresh: false, allowToggleSource: isUseOtherSource }).catch(err => {
           console.log(err)
           return null
         })
       : Promise.resolve(null),
     appSetting['download.isEmbedLyric']
-      ? getLyricInfo({ musicInfo: downloadInfo.metadata.musicInfo, isRefresh: false, allowToggleSource: isUseOtherSource }).catch(err => {
+      ? getLyricInfo({ musicInfo, isRefresh: false, allowToggleSource: isUseOtherSource }).catch(err => {
         console.log(err)
         return null
       })
       : Promise.resolve(null),
+    fetchDownloadTagMeta(musicInfo).catch(err => {
+      console.log(err)
+      return {
+        year: '',
+        track: '',
+        disc: '',
+        genre: '',
+        language: '',
+        comment: '',
+      }
+    }),
   ]
-  void Promise.all(tasks).then(([imgUrl, lyrics]) => {
+  void Promise.all(tasks).then(([imgUrl, lyrics, tagMeta]) => {
     const info = {
       filePath: downloadInfo.metadata.filePath,
       isEmbedLyricLx: appSetting['download.isEmbedLyricLx'],
       isEmbedLyricT: appSetting['download.isEmbedLyricT'],
       isEmbedLyricR: appSetting['download.isEmbedLyricR'],
-      title: downloadInfo.metadata.musicInfo.name,
-      artist: downloadInfo.metadata.musicInfo.singer?.replaceAll('、', ';'),
-      album: downloadInfo.metadata.musicInfo.meta.albumName,
+      title: musicInfo.name,
+      artist: musicInfo.singer?.replaceAll('、', ';'),
+      album: musicInfo.meta.albumName,
       APIC: imgUrl,
+      year: tagMeta.year || null,
+      track: tagMeta.track || null,
+      disc: tagMeta.disc || null,
+      genre: tagMeta.genre || null,
+      language: tagMeta.language || null,
+      comment: tagMeta.comment || null,
     }
     void window.lx.worker.download.writeMeta(info, lyrics ?? { lyric: '' }, getProxy())
   })
