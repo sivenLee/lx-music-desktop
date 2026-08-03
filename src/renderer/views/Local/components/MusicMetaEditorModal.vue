@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" movable width="920px" max-width="92%" height="78%" max-height="660px" @close="handleClose">
+  <material-modal :show="visible" movable width="920px" max-width="92%" height="78%" max-height="680px" @close="handleClose">
     <main :class="$style.modal">
       <h2 :class="$style.title" data-modal-drag>编辑元信息</h2>
       <div :class="$style.filePath" :title="form.filePath">{{ form.filePath || '-' }}</div>
@@ -88,7 +88,22 @@
               <textarea v-model="form.lyrics" :class="[$style.input, $style.lyricArea]" rows="3" />
             </div>
             <div :class="$style.field">
-              <span :class="$style.labelPlain">自定义标签 (用#分隔)</span>
+              <div :class="$style.labelRow">
+                <span :class="$style.labelPlain">自定义标签 (用#分隔)</span>
+                <div :class="$style.aiActions">
+                  <span :class="$style.aiModel" :title="appSetting['ai.model']">
+                    {{ appSetting['ai.model'] || '未配置模型' }}
+                  </span>
+                  <button
+                    type="button"
+                    :class="$style.btn"
+                    :disabled="isLoading || isSaving || isGeneratingTags || !form.filePath"
+                    @click="handleGenerateTags"
+                  >
+                    {{ isGeneratingTags ? '生成中…' : 'AI 生成' }}
+                  </button>
+                </div>
+              </div>
               <textarea v-model="form.customTags" :class="[$style.input, $style.textarea]" rows="3" />
             </div>
           </div>
@@ -161,7 +176,7 @@
           <button
             type="button"
             :class="[$style.btn, $style.primaryBtn]"
-            :disabled="isLoading || isSaving || !form.filePath"
+            :disabled="isLoading || isSaving || isGeneratingTags || !form.filePath"
             @click="handleSave"
           >
             {{ isSaving ? '保存中…' : '保存' }}
@@ -189,9 +204,10 @@ import {
   isLocalMusicMetaEditable,
   type LocalMusicEditInfo,
 } from '@renderer/utils/music'
-import { localMusicWriteMusicMeta, showSelectDialog } from '@renderer/utils/ipc'
+import { localMusicWriteMusicMeta, showSelectDialog, generateMusicTags } from '@renderer/utils/ipc'
 import { encodePath } from '@common/utils/common'
 import { dialog } from '@renderer/plugins/Dialog'
+import { appSetting } from '@renderer/store/setting'
 import MusicMetaSearchModal from './MusicMetaSearchModal.vue'
 import type { MusicMetaSearchResultPayload } from '../musicMetaEditTypes'
 
@@ -289,6 +305,7 @@ export default {
     const overrides = reactive(createDefaultOverrides())
     const isLoading = ref(false)
     const isSaving = ref(false)
+    const isGeneratingTags = ref(false)
     const error = ref('')
     const isSearchVisible = ref(false)
     const isDirty = ref(false)
@@ -425,6 +442,51 @@ export default {
       isDirty.value = true
     }
 
+    const mergeGeneratedTags = (tags: string[]) => {
+      const mergeMode = appSetting['ai.tag.mergeMode']
+      if (mergeMode === 'append' && form.customTags.trim()) {
+        const existing = form.customTags.split('#').map(item => item.trim()).filter(Boolean)
+        const merged = [...existing]
+        for (const tag of tags) {
+          if (!merged.includes(tag)) merged.push(tag)
+        }
+        form.customTags = merged.join('#')
+        return
+      }
+      form.customTags = tags.join('#')
+    }
+
+    const handleGenerateTags = async() => {
+      if (!form.title.trim() && !form.artist.trim()) {
+        await dialog('请至少填写标题或艺术家')
+        return
+      }
+      const mergeMode = appSetting['ai.tag.mergeMode']
+      if (form.customTags.trim() && mergeMode === 'replace') {
+        if (!await dialog.confirm('将覆盖当前自定义标签，是否继续？')) return
+      }
+
+      isGeneratingTags.value = true
+      try {
+        const { tags } = await generateMusicTags({
+          title: form.title.trim(),
+          artist: form.artist.trim(),
+          album: form.album.trim() || undefined,
+          genre: form.genre.trim() || undefined,
+          year: form.year.trim() || undefined,
+          comment: form.comment.trim() || undefined,
+          lyrics: form.lyrics.trim() || undefined,
+        })
+        mergeGeneratedTags(tags)
+        isDirty.value = true
+      } catch (err) {
+        console.log(err)
+        await dialog(`AI 生成失败：${err instanceof Error ? err.message : '未知错误'}`)
+      } finally {
+        isGeneratingTags.value = false
+      }
+    }
+
     const applySearchValue = (enabled: boolean, value: string | undefined, apply: (text: string) => void) => {
       if (!enabled) return
       const text = `${value ?? ''}`.trim()
@@ -513,8 +575,10 @@ export default {
     return {
       form,
       overrides,
+      appSetting,
       isLoading,
       isSaving,
+      isGeneratingTags,
       error,
       isSearchVisible,
       canGoPrev,
@@ -529,6 +593,7 @@ export default {
       handleReload,
       handlePickCover,
       handleClearCover,
+      handleGenerateTags,
       handleSearchSelect,
       handleSave,
     }
@@ -627,6 +692,29 @@ export default {
 .labelPlain {
   font-size: 12px;
   color: var(--color-font-label);
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aiActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aiModel {
+  max-width: 160px;
+  font-size: 12px;
+  color: var(--color-font-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .label {

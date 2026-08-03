@@ -155,6 +155,7 @@ const modules = {
     get_music_url_count: 'get_music_url_count',
 
     open_api_action: 'open_api_action',
+    ai_generate_music_tags: 'ai_generate_music_tags',
     sync_action: 'sync_action',
     sync_get_server_devices: 'sync_get_server_devices',
     sync_remove_server_device: 'sync_remove_server_device',

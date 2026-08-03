@@ -12,6 +12,7 @@ import music from './music'
 import download from './download'
 import soundEffect from './soundEffect'
 import openAPI from './openAPI'
+import aiTags from './aiTags'
 import localMusic from './localMusic'
 import { sendEvent } from '../main'
 
@@ -40,6 +41,7 @@ export default () => {
   download()
   soundEffect()
   openAPI()
+  aiTags()
   localMusic()
 
   global.lx.event_app.on('updated_config', (keys, setting) => {

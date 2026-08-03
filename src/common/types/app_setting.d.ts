@@ -682,6 +682,36 @@ declare global {
       'openAPI.bindLan': boolean
 
       /**
+       * AI OpenAI 兼容接口地址（如 Ollama: http://127.0.0.1:11434/v1）
+       */
+      'ai.baseUrl': string
+
+      /**
+       * AI API Key（本地 Ollama 可空）
+       */
+      'ai.apiKey': string
+
+      /**
+       * AI 模型名称
+       */
+      'ai.model': string
+
+      /**
+       * AI 生成标签的系统提示词
+       */
+      'ai.systemPrompt': string
+
+      /**
+       * AI 生成标签最大数量
+       */
+      'ai.tag.maxCount': number
+
+      /**
+       * AI 生成标签合并模式：覆盖 / 追加去重
+       */
+      'ai.tag.mergeMode': 'replace' | 'append'
+
+      /**
        * 是否在离开搜索界面时自动清空搜索框
        */
       'odc.isAutoClearSearchInput': boolean

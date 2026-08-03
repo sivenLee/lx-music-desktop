@@ -1007,3 +1007,23 @@ export const localMusicWriteMusicMeta = async(params: {
     meta: LX.Music.MusicFileMeta
   }, LX.Music.MusicInfoLocal>(LOCAL_MUSIC_EVENT_NAME.write_music_meta, params)
 }
+
+export const generateMusicTags = async(params: {
+  title: string
+  artist: string
+  album?: string
+  genre?: string
+  year?: string
+  comment?: string
+  lyrics?: string
+}): Promise<{ tags: string[] }> => {
+  return rendererInvoke<{
+    title: string
+    artist: string
+    album?: string
+    genre?: string
+    year?: string
+    comment?: string
+    lyrics?: string
+  }, { tags: string[] }>(WIN_MAIN_RENDERER_EVENT_NAME.ai_generate_music_tags, params)
+}
