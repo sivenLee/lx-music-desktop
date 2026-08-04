@@ -7,6 +7,8 @@
         :selected-directory="selectedDirectory"
         :current-directory-path="currentDirectoryPath"
         :visible="isDirectoryPopoverVisible"
+        :disabled="localMusicState.isRefreshing"
+        :refreshing="localMusicState.isRefreshing"
         @toggle="handleToggleDirectoryPopover"
         @select="handleSelectDirectory"
         @remove="handleRemoveDirectory"
@@ -47,13 +49,23 @@
     </div>
     <div :class="$style.header">
       <div :class="$style.searchInputWrap">
+        <span :class="$style.searchIcon" aria-hidden="true">
+          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="100%" viewBox="0 0 30.239 30.239" space="preserve">
+            <use xlink:href="#icon-search" />
+          </svg>
+        </span>
         <input
           v-model="searchInputText"
           :class="$style.searchInput"
           type="text"
           :placeholder="$t('local_music_search_expression_placeholder')"
           @blur="handleSearchBlur"
+          @keyup.enter="handleSearchEnter"
         />
+        <span
+          v-if="searchInputText.trim()"
+          :class="$style.searchResultCount"
+        >{{ filteredMusicFiles.length }}</span>
         <button
           v-if="searchInputText"
           type="button"
@@ -64,6 +76,14 @@
           ×
         </button>
       </div>
+      <KeywordSearchFieldMenu
+        ref="keywordSearchFieldMenuComponentRef"
+        :visible="isKeywordSearchFieldMenuVisible"
+        :fields="keywordSearchFieldOptions"
+        :selected-keys="localMusicState.keywordSearchFields"
+        @toggle="handleToggleKeywordSearchFieldMenu"
+        @change="handleToggleKeywordSearchField"
+      />
     </div>
     <div :class="$style.main">
       <PlaylistSidebar
@@ -78,6 +98,7 @@
         :is-queue-playlist-active="isQueuePlaylistActive"
         :right-click-playlist-path="rightClickPlaylistPath"
         :current-directory-id="localMusicState.currentDirectory?.id ?? ''"
+        :is-refreshing="localMusicState.isRefreshing"
         :on-reorder="handleReorderPlaylists"
         @create="handleStartCreatePlaylist"
         @refresh="handleRefreshDirectory"
@@ -174,6 +195,7 @@ import { useLocalQueue, LOCAL_MUSIC_QUEUE_ID } from './useLocalQueue'
 import { dialog } from '@renderer/plugins/Dialog'
 import DirectorySelector from './components/DirectorySelector.vue'
 import ColumnMenu from './components/ColumnMenu.vue'
+import KeywordSearchFieldMenu from './components/KeywordSearchFieldMenu.vue'
 import PlaylistSidebar from './components/PlaylistSidebar.vue'
 import MusicTable from './components/MusicTable.vue'
 import MusicDetailModal from './components/MusicDetailModal.vue'
@@ -189,6 +211,7 @@ export default {
   components: {
     DirectorySelector,
     ColumnMenu,
+    KeywordSearchFieldMenu,
     PlaylistSidebar,
     MusicTable,
     MusicDetailModal,
@@ -202,6 +225,7 @@ export default {
     const localMusic = useLocalMusic()
     const directorySelectorComponentRef = ref<{ rootRef: HTMLElement | null } | null>(null)
     const columnMenuComponentRef = ref<{ rootRef: HTMLElement | null } | null>(null)
+    const keywordSearchFieldMenuComponentRef = ref<{ rootRef: HTMLElement | null } | null>(null)
     const musicTableComponentRef = ref<{
       musicTableRef: HTMLElement | null
       selectAllCheckboxRef: HTMLInputElement | null
@@ -209,6 +233,7 @@ export default {
     const playlistSidebarComponentRef = ref<{ refreshPlaylistSort: () => void } | null>(null)
 
     const isDirectoryPopoverVisible = ref(false)
+    const isKeywordSearchFieldMenuVisible = ref(false)
     const searchInputText = ref(localMusic.state.value.searchText)
     const isMultiSelectEnabled = ref(false)
 
@@ -288,25 +313,36 @@ export default {
     const musicMetaEditorTarget = ref<LX.Music.MusicInfoLocal | null>(null)
 
     const handleToggleDirectoryPopover = () => {
+      if (localMusic.state.value.isRefreshing) return
       isDirectoryPopoverVisible.value = !isDirectoryPopoverVisible.value
     }
 
     const handleSelectDirectory = (directory: LX.LocalMusic.LocalMusicDirectory) => {
+      if (localMusic.state.value.isRefreshing || localMusic.state.value.isLoading) return
       isDirectoryPopoverVisible.value = false
-      void localMusic.selectDirectory(directory)
+      localMusic.selectDirectory(directory).catch((err) => {
+        console.error(err)
+      })
     }
 
     const handleRemoveDirectory = (directory?: LX.LocalMusic.LocalMusicDirectory) => {
+      if (localMusic.state.value.isRefreshing) return
       const targetDirectory = directory ?? selectedDirectory.value
       if (!targetDirectory) return
       if (selectedDirectory.value?.id === targetDirectory.id) {
         isDirectoryPopoverVisible.value = false
       }
-      void localMusic.removeDirectory(targetDirectory)
+      localMusic.removeDirectory(targetDirectory).catch((err) => {
+        console.error(err)
+      })
     }
 
     const handleRefreshDirectory = () => {
-      void localMusic.refreshDirectory()
+      if (localMusic.state.value.isLoading) return
+      isDirectoryPopoverVisible.value = false
+      localMusic.refreshDirectory().catch((err) => {
+        console.error(err)
+      })
     }
 
     const syncSearchText = () => {
@@ -319,9 +355,23 @@ export default {
       applySearchText()
     }
 
+    const handleSearchEnter = () => {
+      syncSearchText()
+    }
+
     const handleClearSearch = () => {
       searchInputText.value = ''
       syncSearchText()
+    }
+
+    const handleToggleKeywordSearchFieldMenu = () => {
+      isKeywordSearchFieldMenuVisible.value = !isKeywordSearchFieldMenuVisible.value
+    }
+
+    const handleToggleKeywordSearchField = (key: Parameters<typeof localMusic.toggleKeywordSearchField>[0]) => {
+      localMusic.toggleKeywordSearchField(key).catch((err) => {
+        console.error(err)
+      })
     }
 
     const handleClickOutside = (event: MouseEvent) => {
@@ -332,6 +382,9 @@ export default {
       }
       if (!columnMenuComponentRef.value?.rootRef?.contains(target)) {
         musicTable.isMusicColumnMenuVisible.value = false
+      }
+      if (!keywordSearchFieldMenuComponentRef.value?.rootRef?.contains(target)) {
+        isKeywordSearchFieldMenuVisible.value = false
       }
     }
 
@@ -537,12 +590,16 @@ export default {
       filteredMusicFiles,
       directorySelectorComponentRef,
       columnMenuComponentRef,
+      keywordSearchFieldMenuComponentRef,
       musicTableComponentRef,
       playlistSidebarComponentRef,
       isDirectoryPopoverVisible,
+      isKeywordSearchFieldMenuVisible,
       selectedDirectory,
       currentDirectoryPath,
       searchInputText,
+      handleToggleKeywordSearchFieldMenu,
+      handleToggleKeywordSearchField,
       ...musicTable,
       ...multiSelect,
       ...localQueue,
@@ -556,6 +613,7 @@ export default {
       handleRemoveDirectory,
       handleRefreshDirectory,
       handleSearchBlur,
+      handleSearchEnter,
       handleClearSearch,
       handlePlaylistContextMenu,
       handlePlaylistMenuClick,
@@ -649,7 +707,8 @@ export default {
 .searchInput {
   width: 100%;
   padding: 5px 10px;
-  padding-right: 28px;
+  padding-left: 32px;
+  padding-right: 52px;
   border-radius: 4px;
   border: 1px solid var(--color-primary-background);
   background: var(--color-background);
@@ -666,6 +725,36 @@ export default {
 .searchInputWrap {
   position: relative;
   flex: 1;
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--color-font-label);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.searchResultCount {
+  position: absolute;
+  top: 50%;
+  right: 28px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--color-font-label);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .searchClearBtn {

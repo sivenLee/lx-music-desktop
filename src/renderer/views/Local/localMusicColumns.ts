@@ -16,6 +16,7 @@ export type LocalMusicColumnKey =
   | 'language'
   | 'comment'
   | 'customTag'
+  | 'lyrics'
   | 'createTime'
   | 'modifyTime'
   | 'fileType'
@@ -47,7 +48,7 @@ export const LOCAL_MUSIC_COLUMNS: LocalMusicColumnDefinition[] = [
   { key: 'filePath', label: '文件路径', width: 500, sortable: true },
   { key: 'title', label: '标题', width: 220, sortable: true },
   { key: 'artist', label: '艺术家', width: 180, sortable: true, defaultVisible: true },
-  { key: 'albumName', label: '专辑名', width: 180, sortable: true, defaultVisible: true },
+  { key: 'albumName', label: '专辑', width: 180, sortable: true, defaultVisible: true },
   { key: 'duration', label: '时长', width: 104, sortable: true, defaultVisible: true, align: 'center' },
   { key: 'year', label: '年代', width: 88, sortable: true, defaultVisible: true, align: 'center' },
   { key: 'track', label: '音轨号', width: 88, sortable: true, align: 'center' },
@@ -55,7 +56,8 @@ export const LOCAL_MUSIC_COLUMNS: LocalMusicColumnDefinition[] = [
   { key: 'genre', label: '流派', width: 140 },
   { key: 'language', label: '语种', width: 100 },
   { key: 'comment', label: '注释', width: 220 },
-  { key: 'customTag', label: '自定义标签', width: 160 },
+  { key: 'customTag', label: '标签', width: 160 },
+  { key: 'lyrics', label: '歌词', width: 220 },
   { key: 'createTime', label: '创建时间', width: 170, sortable: true },
   { key: 'modifyTime', label: '修改时间', width: 170, sortable: true, defaultVisible: true },
   { key: 'fileType', label: '文件类型', width: 100, sortable: true, align: 'center' },
@@ -191,6 +193,8 @@ export const getMusicColumnText = (musicInfo: LX.Music.MusicInfoLocal, key: Loca
       return formatMusicColumnText(musicInfo.meta.comment)
     case 'customTag':
       return formatMusicColumnText(musicInfo.meta.customTags)
+    case 'lyrics':
+      return formatMusicColumnText(musicInfo.meta.lyricsPreview)
     case 'createTime':
       return musicInfo.meta.createTime ? dateFormat(musicInfo.meta.createTime) : EMPTY_CELL_VALUE
     case 'modifyTime':

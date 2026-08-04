@@ -142,9 +142,22 @@ export default {
   background: var(--color-background);
   color: var(--color-font);
   cursor: pointer;
+  transition: background-color @transition-normal;
+
+  &:hover {
+    background: var(--color-primary-background-hover);
+  }
+
+  &:active {
+    background: var(--color-primary-background);
+  }
 }
 
 .playlistEditorPrimaryBtn {
   background: var(--color-primary-background-hover);
+
+  &:hover {
+    background: var(--color-primary-background);
+  }
 }
 </style>

@@ -88,6 +88,7 @@
               </template>
               <template v-else>
                 <span
+                  class="select"
                   :class="$style.cellText"
                   :title="column.key === 'fileName' ? (row.item.meta.fileName || row.item.name) : getMusicColumnText(row.item, column.key)"
                 >

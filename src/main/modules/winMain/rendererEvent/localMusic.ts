@@ -9,6 +9,7 @@ import {
   parseM3UPlaylist,
   parseM3UPlaylistDetail,
   generateId,
+  buildLyricsPreview,
 } from '@common/utils/localMusic'
 import { setMeta } from '@common/utils/musicMeta'
 import path from 'node:path'
@@ -48,9 +49,13 @@ interface LocalMusicDirectoryConfigFile extends LX.LocalMusic.LocalMusicDirector
 }
 
 const getViewState = (store: ReturnType<typeof getStore>) => {
-  return store.get<LX.LocalMusic.LocalMusicViewState>(LOCAL_MUSIC_VIEW_STATE_KEY) ?? {
+  const state = store.get<LX.LocalMusic.LocalMusicViewState>(LOCAL_MUSIC_VIEW_STATE_KEY) ?? {
     currentDirectoryId: null,
     currentPlaylistPath: null,
+  }
+  return {
+    currentDirectoryId: state.currentDirectoryId ?? null,
+    currentPlaylistPath: state.currentPlaylistPath ?? null,
   }
 }
 
@@ -88,10 +93,14 @@ const normalizeDirectoryConfig = (
       : null,
     order: config?.sortState?.order === 'desc' ? 'desc' : 'asc',
   } as const
+  const keywordSearchFields = Array.isArray(config?.keywordSearchFields)
+    ? config.keywordSearchFields.filter((key): key is string => typeof key == 'string')
+    : undefined
   return {
     currentPlaylistPath: currentPlaylistPath && playlistFiles?.includes(currentPlaylistPath) === false ? null : currentPlaylistPath,
     selectedColumnKeys,
     sortState,
+    ...(keywordSearchFields != null ? { keywordSearchFields } : {}),
   }
 }
 
@@ -336,10 +345,39 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
   }
   const comment = metadata.common.comment?.map(item => item.text?.trim() ?? '').filter(Boolean).join('\n') ?? ''
   const formatTrackDisc = (value?: { no: number | null, of: number | null }) => {
-    if (!value || value.no == null) return null
+    if (value?.no == null) return null
     if (value.of == null) return `${value.no}`
     return `${value.no}/${value.of}`
   }
+
+  const fileExt = ext.replace(/^\./, '')
+  const sidecarBase = filePath.slice(0, filePath.length - ext.length)
+  const [hasSidecarJpg, hasSidecarPng, hasSidecarLrc, hasSidecarKrc] = await Promise.all([
+    checkPath(`${sidecarBase}.jpg`),
+    checkPath(`${sidecarBase}.png`),
+    checkPath(`${sidecarBase}.lrc`),
+    checkPath(`${sidecarBase}.krc`),
+  ])
+  const hasEmbeddedCover = Boolean(metadata.common.picture?.length)
+  const embeddedLyricText = (() => {
+    const fromCommon = (metadata.common.lyrics
+      ?.map(item => (typeof item == 'string' ? item : item.text ?? ''))
+      .join('\n') ?? '').trim()
+    if (fromCommon) return fromCommon
+    const fromLyricsTag = extractNativeTagValue(metadata, 'LYRICS')
+    if (fromLyricsTag) return fromLyricsTag
+    return extractNativeTagValue(metadata, 'USLT')
+  })()
+  let lyricsText = embeddedLyricText
+  if (!lyricsText && hasSidecarLrc) {
+    try {
+      lyricsText = (await fs.promises.readFile(`${sidecarBase}.lrc`, { encoding: 'utf8' })).trim()
+    } catch (err) {
+      console.log(err)
+    }
+  }
+  const lyricsPreview = buildLyricsPreview(lyricsText)
+  const hasLyrics = Boolean(lyricsText) || hasSidecarKrc
 
   return {
     id: filePath,
@@ -352,7 +390,7 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
       filePath,
       songId: filePath,
       picUrl: '',
-      ext: ext.replace(/^\./, ''),
+      ext: fileExt,
       fileName: basename(filePath),
       duration,
       year: metadata.common.year ?? null,
@@ -362,6 +400,9 @@ const createLocalMusicInfo = async(filePath: string): Promise<LX.Music.MusicInfo
       language: metadata.common.language?.trim() ?? '',
       comment,
       customTags: extractNativeTagValue(metadata, 'CUSTOM_TAGS'),
+      hasCover: hasEmbeddedCover || hasSidecarJpg || hasSidecarPng,
+      hasLyrics,
+      lyricsPreview,
       createTime: stats?.birthtimeMs ?? null,
       modifyTime: stats?.mtimeMs ?? null,
       fileSize: stats?.size ?? null,
@@ -567,6 +608,7 @@ export default () => {
     const viewState = getViewState(store)
     if (viewState.currentDirectoryId === dirId) {
       setViewState(store, {
+        ...viewState,
         currentDirectoryId: directories[0]?.id ?? null,
         currentPlaylistPath: null,
       })

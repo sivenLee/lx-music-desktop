@@ -8,6 +8,7 @@
           :class="$style.playlistHeaderBtn"
           :aria-label="$t('lists__new_list_btn')"
           title="新增播放列表"
+          :disabled="isRefreshing"
           @click="$emit('create')"
         >
           <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="70%" viewBox="0 0 24 24" space="preserve">
@@ -18,6 +19,7 @@
           type="button"
           :class="$style.playlistHeaderBtn"
           title="刷新播放列表"
+          :disabled="isRefreshing"
           @click="$emit('refresh')"
         >
           <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" style="transform: rotate(45deg);" height="70%" viewBox="0 0 24 24" space="preserve">
@@ -131,6 +133,10 @@ export default {
       type: Function as unknown as () => (playlistFiles: string[]) => void,
       required: true,
     },
+    isRefreshing: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ['create', 'refresh', 'selectAllFiles', 'selectPlaylist', 'playlistContextMenu'],
   setup(props: {
@@ -145,6 +151,7 @@ export default {
     rightClickPlaylistPath: string
     currentDirectoryId: string
     onReorder: (playlistFiles: string[]) => void
+    isRefreshing: boolean
   }, { expose }: { expose: (exposed: Record<string, unknown>) => void }) {
     const styles = useCssModule()
     const playlistSortListRef = ref<HTMLElement | null>(null)
@@ -209,14 +216,20 @@ export default {
   border-radius: @radius-border;
   cursor: pointer;
   color: var(--color-font-label);
-  transition: color @transition-normal;
+  transition: color @transition-normal, background-color @transition-normal;
 
   svg {
     vertical-align: bottom;
   }
 
-  &:hover {
+  &:hover:not(:disabled) {
     color: var(--color-primary);
+    background-color: var(--color-primary-background-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 }
 

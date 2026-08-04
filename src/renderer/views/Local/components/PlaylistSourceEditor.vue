@@ -274,9 +274,27 @@ export default {
   background: var(--color-background);
   color: var(--color-font);
   cursor: pointer;
+  transition: background-color .2s ease;
+
+  &:hover:not(:disabled) {
+    background: var(--color-primary-background-hover);
+  }
+
+  &:active:not(:disabled) {
+    background: var(--color-primary-background);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 }
 
 .playlistEditorPrimaryBtn {
   background: var(--color-primary-background-hover);
+
+  &:hover:not(:disabled) {
+    background: var(--color-primary-background);
+  }
 }
 </style>

@@ -1,15 +1,23 @@
 <template>
   <div ref="rootRef" :class="$style.directorySelector">
-    <input
-      :value="currentDirectoryPath"
-      :class="$style.directoryInput"
-      type="text"
-      :placeholder="$t('no_item')"
-      readonly
-      @click="$emit('toggle')"
-    />
+    <div :class="$style.directoryInputWrap">
+      <input
+        :value="currentDirectoryPath"
+        :class="[$style.directoryInput, { [$style.directoryInputDisabled]: disabled }]"
+        type="text"
+        :placeholder="$t('no_item')"
+        readonly
+        :disabled="disabled"
+        @click="handleToggle"
+      />
+      <span :class="[$style.directoryInputIcon, { [$style.directoryInputIconOpen]: visible && !disabled }]" aria-hidden="true">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" height="100%" viewBox="0 0 451.847 451.847" space="preserve">
+          <use xlink:href="#icon-down" />
+        </svg>
+      </span>
+    </div>
     <div
-      v-if="visible"
+      v-if="visible && !disabled"
       :class="$style.directoryPopover"
     >
       <div
@@ -49,11 +57,11 @@
     </button>
     <button
       :class="$style.button"
-      :disabled="!selectedDirectory"
+      :disabled="!selectedDirectory || refreshing"
       title="刷新目录"
       @click="$emit('refresh')"
     >
-      刷新目录
+      {{ refreshing ? '刷新中...' : '刷新目录' }}
     </button>
   </div>
 </template>
@@ -80,16 +88,33 @@ export default {
       type: Boolean,
       default: false,
     },
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
+    refreshing: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ['toggle', 'select', 'remove', 'add', 'refresh'],
-  setup(_props: Record<string, unknown>, { expose }: { expose: (exposed: Record<string, unknown>) => void }) {
+  setup(props: {
+    disabled: boolean
+  }, { emit, expose }: {
+    emit: (event: 'toggle') => void
+    expose: (exposed: Record<string, unknown>) => void
+  }) {
     const rootRef = ref<HTMLElement | null>(null)
+    const handleToggle = () => {
+      if (props.disabled) return
+      emit('toggle')
+    }
     expose({
       get rootRef() {
         return rootRef.value
       },
     })
-    return { rootRef }
+    return { rootRef, handleToggle }
   },
 }
 </script>
@@ -103,8 +128,13 @@ export default {
   gap: 5px;
 }
 
+.directoryInputWrap {
+  position: relative;
+  flex: none;
+}
+
 .directoryInput {
-  padding: 5px 10px;
+  padding: 5px 28px 5px 10px;
   border-radius: 4px;
   border: 1px solid var(--color-primary-background);
   background: var(--color-background);
@@ -116,8 +146,37 @@ export default {
 
   &:focus,
   &:hover {
-    border-color: var(--color-primary-background);
+    border-color: var(--color-primary) !important;
   }
+}
+
+.directoryInputIcon {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  color: var(--color-font-label);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .2s ease;
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.directoryInputIconOpen {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.directoryInputDisabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .directoryPopover {
@@ -208,8 +267,9 @@ export default {
   background: var(--color-primary-background-hover);
   color: var(--color-font);
   cursor: pointer;
+  transition: background-color .2s ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--color-primary-background);
   }
 

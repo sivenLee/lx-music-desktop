@@ -43,6 +43,10 @@ declare namespace LX {
       language?: string
       comment?: string
       customTags?: string
+      hasCover?: boolean
+      hasLyrics?: boolean
+      /** 列表展示用歌词摘要（前 100 字） */
+      lyricsPreview?: string
       createTime?: number | null
       modifyTime?: number | null
       fileSize?: number | null

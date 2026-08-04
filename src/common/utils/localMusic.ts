@@ -12,6 +12,19 @@ export const PLAYLIST_EXTENSIONS = new Set([
   '.m3u', '.m3u8',
 ])
 
+const LYRICS_PREVIEW_LENGTH = 1000
+
+/**
+ * 生成列表展示用歌词摘要：去掉成对中括号标签/时间戳后再截取
+ */
+export const buildLyricsPreview = (lyrics: string, maxLength = LYRICS_PREVIEW_LENGTH): string => {
+  const text = `${lyrics ?? ''}`
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.slice(0, maxLength)
+}
+
 // 生成唯一 ID
 export const generateId = (pathStr: string): string => {
   return toMD5(pathStr)

@@ -40,6 +40,8 @@ declare namespace LX {
         key: string | null
         order: 'asc' | 'desc'
       }
+      /** 本地快捷搜索参与字段（仅影响关键词搜索，按目录持久化） */
+      keywordSearchFields?: string[]
     }
   }
 }

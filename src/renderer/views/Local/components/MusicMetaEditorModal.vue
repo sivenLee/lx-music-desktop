@@ -29,7 +29,7 @@
               <div :class="$style.field">
                 <label :class="$style.label">
                   <input v-model="overrides.album" type="checkbox" />
-                  <span>专辑名</span>
+                  <span>专辑</span>
                 </label>
                 <input v-model="form.album" :class="$style.input" type="text" />
               </div>
@@ -89,7 +89,7 @@
             </div>
             <div :class="$style.field">
               <div :class="$style.labelRow">
-                <span :class="$style.labelPlain">自定义标签 (用#分隔)</span>
+                <span :class="$style.labelPlain">标签 (用#分隔)</span>
                 <div :class="$style.aiActions">
                   <span :class="$style.aiModel" :title="appSetting['ai.model']">
                     {{ appSetting['ai.model'] || '未配置模型' }}
@@ -463,7 +463,7 @@ export default {
       }
       const mergeMode = appSetting['ai.tag.mergeMode']
       if (form.customTags.trim() && mergeMode === 'replace') {
-        if (!await dialog.confirm('将覆盖当前自定义标签，是否继续？')) return
+        if (!await dialog.confirm('将覆盖当前标签，是否继续？')) return
       }
 
       isGeneratingTags.value = true

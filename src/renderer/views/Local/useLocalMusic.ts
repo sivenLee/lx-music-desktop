@@ -21,6 +21,13 @@ import {
 } from '@renderer/utils/ipc'
 import path from 'node:path'
 import { dialog } from '@renderer/plugins/Dialog'
+import {
+  DEFAULT_KEYWORD_SEARCH_FIELDS,
+  KEYWORD_SEARCH_FIELD_OPTIONS,
+  matchLocalMusicSearchExpression,
+  normalizeKeywordSearchFields,
+  type KeywordSearchFieldKey,
+} from './localMusicSearch'
 
 export interface LocalMusicState {
   directories: LX.LocalMusic.LocalMusicDirectory[]
@@ -33,7 +40,9 @@ export interface LocalMusicState {
   playlistInvalidCounts: Record<string, number>
   currentPlaylist: string | null
   searchText: string
+  keywordSearchFields: KeywordSearchFieldKey[]
   isLoading: boolean
+  isRefreshing: boolean
   isInited: boolean
 }
 
@@ -55,125 +64,15 @@ const createInitialState = (): LocalMusicState => ({
   playlistInvalidCounts: {},
   currentPlaylist: null,
   searchText: '',
+  keywordSearchFields: [...DEFAULT_KEYWORD_SEARCH_FIELDS],
   isLoading: false,
+  isRefreshing: false,
   isInited: false,
 })
 
 const state = ref<LocalMusicState>(createInitialState())
 
 export function useLocalMusic() {
-  const matchSearchKeyword = (keyword: string, searchFields: string[]) => {
-    const text = keyword.trim().toLowerCase()
-    if (!text) return true
-    return searchFields.some(field => field.includes(text))
-  }
-
-  const tokenizeSearchExpression = (expression: string) => {
-    const tokens: string[] = []
-    let current = ''
-
-    for (let i = 0; i < expression.length; i++) {
-      const char = expression[i]
-      const nextChar = expression[i + 1]
-      if (char === '&' && nextChar === '&') {
-        if (current.trim()) tokens.push(current.trim())
-        tokens.push('&&')
-        current = ''
-        i++
-        continue
-      }
-      if (char === '|' && nextChar === '|') {
-        if (current.trim()) tokens.push(current.trim())
-        tokens.push('||')
-        current = ''
-        i++
-        continue
-      }
-      if (char === '!' || char === '(' || char === ')') {
-        if (current.trim()) tokens.push(current.trim())
-        tokens.push(char)
-        current = ''
-        continue
-      }
-      current += char
-    }
-
-    if (current.trim()) tokens.push(current.trim())
-    return tokens
-  }
-
-  const matchSearchExpression = (expression: string, searchFields: string[]) => {
-    const text = expression.trim()
-    if (!text) return true
-
-    const tokens = tokenizeSearchExpression(text)
-    let index = 0
-
-    const parsePrimary = (): boolean | null => {
-      const token = tokens[index]
-      if (!token) return null
-      if (token === '(') {
-        index++
-        const value = parseOr()
-        if (value == null || tokens[index] !== ')') return null
-        index++
-        return value
-      }
-      if (token === ')' || token === '&&' || token === '||' || token === '!') return null
-      index++
-      return matchSearchKeyword(token, searchFields)
-    }
-
-    const parseUnary = (): boolean | null => {
-      const token = tokens[index]
-      if (token === '!') {
-        index++
-        const value = parseUnary()
-        return value == null ? null : !value
-      }
-      return parsePrimary()
-    }
-
-    const parseAnd = (): boolean | null => {
-      let value = parseUnary()
-      if (value == null) return null
-      while (tokens[index] === '&&') {
-        index++
-        const rightValue = parseUnary()
-        if (rightValue == null) return null
-        value = value && rightValue
-      }
-      return value
-    }
-
-    const parseOr = (): boolean | null => {
-      let value = parseAnd()
-      if (value == null) return null
-      while (tokens[index] === '||') {
-        index++
-        const rightValue = parseAnd()
-        if (rightValue == null) return null
-        value = value || rightValue
-      }
-      return value
-    }
-
-    const result = parseOr()
-    if (result == null || index < tokens.length) {
-      return matchSearchKeyword(text, searchFields)
-    }
-    return result
-  }
-
-  const getSearchFields = (file: LX.Music.MusicInfoLocal) => {
-    return [
-      path.basename(file.meta.filePath),
-      file.name,
-      file.singer,
-      file.meta.albumName,
-    ].map(text => (text ?? '').toLowerCase())
-  }
-
   const filteredMusicFiles = computed(() => {
     const expression = state.value.searchText.trim()
     if (!expression) {
@@ -181,8 +80,7 @@ export function useLocalMusic() {
     }
 
     return state.value.musicFiles.filter(file => {
-      const searchFields = getSearchFields(file)
-      return matchSearchExpression(expression, searchFields)
+      return matchLocalMusicSearchExpression(expression, file, state.value.keywordSearchFields)
     })
   })
 
@@ -202,12 +100,16 @@ export function useLocalMusic() {
         key: config.sortState.key ?? null,
         order: config.sortState.order === 'desc' ? 'desc' : 'asc',
       },
+      keywordSearchFields: Array.isArray(config.keywordSearchFields)
+        ? [...config.keywordSearchFields]
+        : [...state.value.keywordSearchFields],
     }
     const savedConfig = await localMusicSaveDirectoryConfig({
       dirPath: state.value.currentDirectory.path,
       config: plainConfig,
     })
     state.value.directoryConfig = savedConfig
+    state.value.keywordSearchFields = normalizeKeywordSearchFields(savedConfig.keywordSearchFields)
     return savedConfig
   }
 
@@ -219,6 +121,19 @@ export function useLocalMusic() {
         ...state.value.directoryConfig.sortState,
         ...patch.sortState,
       },
+    })
+  }
+
+  const toggleKeywordSearchField = async(key: KeywordSearchFieldKey) => {
+    const current = new Set(state.value.keywordSearchFields)
+    if (current.has(key)) current.delete(key)
+    else current.add(key)
+    const next = KEYWORD_SEARCH_FIELD_OPTIONS
+      .map(item => item.key)
+      .filter(item => current.has(item))
+    state.value.keywordSearchFields = next.length ? next : []
+    await updateDirectoryConfig({
+      keywordSearchFields: [...state.value.keywordSearchFields],
     })
   }
 
@@ -234,6 +149,27 @@ export function useLocalMusic() {
     }))
   }
 
+  const loadDirectoryContent = async(directory: LX.LocalMusic.LocalMusicDirectory, forceRefresh = false) => {
+    state.value.currentDirectory = directory
+    state.value.currentPlaylist = null
+    const result = await localMusicScanDirectory({
+      dirPath: directory.path,
+      forceRefresh,
+    })
+    state.value.allMusicFiles = result.musicFiles
+    state.value.playlistFiles = result.playlistFiles
+    state.value.directoryConfig = result.directoryConfig
+    state.value.keywordSearchFields = normalizeKeywordSearchFields(result.directoryConfig.keywordSearchFields)
+    applyPlaylistDetails(result.playlistDetails)
+    if (result.directoryConfig.currentPlaylistPath && result.playlistFiles.includes(result.directoryConfig.currentPlaylistPath)) {
+      state.value.currentPlaylist = result.directoryConfig.currentPlaylistPath
+      state.value.musicFiles = await localMusicParsePlaylist(result.directoryConfig.currentPlaylistPath)
+    } else {
+      state.value.musicFiles = result.musicFiles
+    }
+    await saveViewState()
+  }
+
   const init = async() => {
     if (state.value.isInited || state.value.isLoading) return
     state.value.isLoading = true
@@ -245,9 +181,14 @@ export function useLocalMusic() {
       state.value.directories = directories
       if (directories.length > 0) {
         const targetDirectory = directories.find(dir => dir.id === viewState.currentDirectoryId) ?? directories[0]
-        await selectDirectory(targetDirectory)
+        await loadDirectoryContent(targetDirectory)
         if (!state.value.currentPlaylist && viewState.currentPlaylistPath && state.value.playlistFiles.includes(viewState.currentPlaylistPath)) {
-          await selectPlaylist(viewState.currentPlaylistPath)
+          state.value.currentPlaylist = viewState.currentPlaylistPath
+          state.value.musicFiles = await localMusicParsePlaylist(viewState.currentPlaylistPath)
+          await updateDirectoryConfig({
+            currentPlaylistPath: viewState.currentPlaylistPath,
+          })
+          await saveViewState()
         }
       } else {
         await saveViewState()
@@ -261,25 +202,10 @@ export function useLocalMusic() {
   }
 
   const selectDirectory = async(directory: LX.LocalMusic.LocalMusicDirectory, forceRefresh = false) => {
-    state.value.currentDirectory = directory
-    state.value.currentPlaylist = null
+    if (state.value.isLoading) return
     state.value.isLoading = true
     try {
-      const result = await localMusicScanDirectory({
-        dirPath: directory.path,
-        forceRefresh,
-      })
-      state.value.allMusicFiles = result.musicFiles
-      state.value.playlistFiles = result.playlistFiles
-      state.value.directoryConfig = result.directoryConfig
-      applyPlaylistDetails(result.playlistDetails)
-      if (result.directoryConfig.currentPlaylistPath && result.playlistFiles.includes(result.directoryConfig.currentPlaylistPath)) {
-        state.value.currentPlaylist = result.directoryConfig.currentPlaylistPath
-        state.value.musicFiles = await localMusicParsePlaylist(result.directoryConfig.currentPlaylistPath)
-      } else {
-        state.value.musicFiles = result.musicFiles
-      }
-      await saveViewState()
+      await loadDirectoryContent(directory, forceRefresh)
     } catch (err) {
       console.error('Failed to scan directory:', err)
     } finally {
@@ -288,8 +214,23 @@ export function useLocalMusic() {
   }
 
   const refreshDirectory = async() => {
-    if (!state.value.currentDirectory) return
-    await selectDirectory(state.value.currentDirectory, true)
+    if (!state.value.currentDirectory || state.value.isLoading) return
+    state.value.isLoading = true
+    state.value.isRefreshing = true
+    state.value.playlistFiles = []
+    state.value.playlistCounts = {}
+    state.value.playlistInvalidCounts = {}
+    state.value.allMusicFiles = []
+    state.value.musicFiles = []
+    state.value.currentPlaylist = null
+    try {
+      await loadDirectoryContent(state.value.currentDirectory, true)
+    } catch (err) {
+      console.error('Failed to refresh directory:', err)
+    } finally {
+      state.value.isRefreshing = false
+      state.value.isLoading = false
+    }
   }
 
   const assertPlaylistName = (name: string) => {
@@ -321,6 +262,7 @@ export function useLocalMusic() {
       } else {
         state.value.currentDirectory = null
         state.value.directoryConfig = createInitialState().directoryConfig
+        state.value.keywordSearchFields = [...DEFAULT_KEYWORD_SEARCH_FIELDS]
         state.value.allMusicFiles = []
         state.value.musicFiles = []
         state.value.playlistFiles = []
@@ -577,6 +519,8 @@ export function useLocalMusic() {
   return {
     state,
     filteredMusicFiles,
+    keywordSearchFieldOptions: KEYWORD_SEARCH_FIELD_OPTIONS,
+    toggleKeywordSearchField,
     saveDirectoryConfig,
     updateDirectoryConfig,
     init,

@@ -1,6 +1,7 @@
 import { checkPath, joinPath, extname, basename, readFile, getFileStats } from '@common/utils/nodejs'
 import { formatPlayTime, sizeFormate, dateFormat, encodePath } from '@common/utils/common'
 import { decodeKrc } from '@common/utils/lyricUtils/kg'
+import { buildLyricsPreview } from '@common/utils/localMusic'
 import { type IAudioMetadata } from 'music-metadata'
 
 export const checkDownloadFileAvailable = async(musicInfo: LX.Download.ListItem, savePath: string): Promise<boolean> => {
@@ -55,7 +56,7 @@ export const getMusicFilePath = async(musicInfo: LX.Music.MusicInfo | LX.Downloa
 }
 
 const formatTrackDisc = (value?: { no: number | null, of: number | null }) => {
-  if (!value || value.no == null) return null
+  if (value?.no == null) return null
   if (value.of == null) return `${value.no}`
   return `${value.no}/${value.of}`
 }
@@ -87,6 +88,35 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
   let albumName = metadata.common.album?.trim() ?? ''
   let stats = await getFileStats(path)
   let comment = metadata.common.comment?.map(item => item.text?.trim() ?? '').filter(Boolean).join('\n') ?? ''
+  const fileExt = ext.replace(/^\./, '')
+  const sidecarBase = path.slice(0, path.length - ext.length)
+  const [hasSidecarJpg, hasSidecarPng, hasSidecarLrc, hasSidecarKrc] = await Promise.all([
+    checkPath(`${sidecarBase}.jpg`),
+    checkPath(`${sidecarBase}.png`),
+    checkPath(`${sidecarBase}.lrc`),
+    checkPath(`${sidecarBase}.krc`),
+  ])
+  const hasEmbeddedCover = Boolean(metadata.common.picture?.length)
+  const embeddedLyricText = (() => {
+    const fromCommon = (metadata.common.lyrics
+      ?.map(item => (typeof item == 'string' ? item : item.text ?? ''))
+      .join('\n') ?? '').trim()
+    if (fromCommon) return fromCommon
+    const fromLyricsTag = extractNativeTagValue(metadata, 'LYRICS')
+    if (fromLyricsTag) return fromLyricsTag
+    return extractNativeTagValue(metadata, 'USLT')
+  })()
+  let lyricsText = embeddedLyricText
+  if (!lyricsText && hasSidecarLrc) {
+    try {
+      const lrcBuf = await readFile(`${sidecarBase}.lrc`)
+      lyricsText = Buffer.from(lrcBuf).toString('utf8').trim()
+    } catch (err) {
+      console.log(err)
+    }
+  }
+  const lyricsPreview = buildLyricsPreview(lyricsText)
+  const hasLyrics = Boolean(lyricsText) || hasSidecarKrc
 
   return {
     id: path,
@@ -99,7 +129,7 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
       filePath: path,
       songId: path,
       picUrl: '',
-      ext: ext.replace(/^\./, ''),
+      ext: fileExt,
       fileName: basename(path),
       duration,
       year: metadata.common.year ?? null,
@@ -109,6 +139,9 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
       language: metadata.common.language?.trim() ?? '',
       comment,
       customTags: extractNativeTagValue(metadata, 'CUSTOM_TAGS'),
+      hasCover: hasEmbeddedCover || hasSidecarJpg || hasSidecarPng,
+      hasLyrics,
+      lyricsPreview,
       createTime: stats?.birthtimeMs ?? null,
       modifyTime: stats?.mtimeMs ?? null,
       fileSize: stats?.size ?? null,
@@ -335,7 +368,7 @@ export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDe
     metaInfo: [
       createDetailField('标题', common?.title ?? basename(path, extname(path))),
       createDetailField('艺术家', common?.artists?.join('、') || common?.artist),
-      createDetailField('专辑名', common?.album),
+      createDetailField('专辑', common?.album),
       createDetailField('时长', format?.duration ? formatPlayTime(format.duration) : ''),
       createDetailField('年代', common?.year),
       createDetailField('音轨号', formatTrackDisc(common?.track)),
@@ -343,7 +376,7 @@ export const getLocalMusicDetailInfo = async(path: string): Promise<LocalMusicDe
       createDetailField('流派', getPreferredGenre(metadata)),
       createDetailField('语种', common?.language || extractNativeTagValue(metadata, 'LANGUAGE') || extractNativeTagValue(metadata, 'TLAN')),
       createDetailField('注释', comment),
-      createDetailField('自定义标签', extractNativeTagValue(metadata, 'CUSTOM_TAGS')),
+      createDetailField('标签', extractNativeTagValue(metadata, 'CUSTOM_TAGS')),
     ],
     audioInfo: [
       createDetailField('采样率', format?.sampleRate ? `${format.sampleRate} Hz` : ''),
