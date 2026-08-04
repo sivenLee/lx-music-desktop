@@ -416,6 +416,8 @@
   "setting__download_embed_pic": "嵌入封面",
   "setting__download_embed_rlyric": "同时嵌入罗马音歌词（如果有）",
   "setting__download_embed_tlyric": "同时嵌入翻译歌词（如果有）",
+  "setting__download_embed_ai_tags": "写入 AI 标签",
+  "setting__download_embed_ai_tags_tip": "需先在「AI」设置中配置有效的接口地址与模型；生成结果写入自定义标签字段",
   "setting__download_enable": "启用下载功能",
   "setting__download_lxlyric": "同时将 LX Music 歌词写入歌词文件中（如果有，使用 LX Music 播放时可支持逐字歌词）",
   "setting__download_lyric": "歌词下载",

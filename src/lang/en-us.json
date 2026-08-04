@@ -416,6 +416,8 @@
   "setting__download_embed_pic": "Embed cover",
   "setting__download_embed_rlyric": "Also embed romanized lyrics if available",
   "setting__download_embed_tlyric": "Also embed translated lyrics if available",
+  "setting__download_embed_ai_tags": "Write AI tags",
+  "setting__download_embed_ai_tags_tip": "Requires a valid AI base URL and model in AI settings; tags are written to the custom tags field",
   "setting__download_enable": "Enable Download",
   "setting__download_lxlyric": "Also write LX Music lyrics into the lyrics file (if any, verbatim lyrics can be supported when playing with LX Music)",
   "setting__download_lyric": "Lyric Download",

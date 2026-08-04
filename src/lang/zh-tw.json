@@ -416,6 +416,8 @@
   "setting__download_embed_pic": "嵌入封面",
   "setting__download_embed_rlyric": "同時嵌入羅馬音歌詞（如果有）",
   "setting__download_embed_tlyric": "同時嵌入翻譯歌詞（如果有）",
+  "setting__download_embed_ai_tags": "寫入 AI 標籤",
+  "setting__download_embed_ai_tags_tip": "需先在「AI」設定中配置有效的介面位址與模型；產生結果寫入自訂標籤欄位",
   "setting__download_enable": "啟用下載功能",
   "setting__download_lxlyric": "同時將 LX Music 歌詞寫入歌詞文件中（如果有，使用 LX Music 播放時可支持逐字歌詞）",
   "setting__download_lyric": "歌詞下載",

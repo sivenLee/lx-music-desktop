@@ -18,6 +18,8 @@ import { DOWNLOAD_STATUS } from '@common/constants'
 import { proxy } from '../index'
 import { buildSavePath } from './utils'
 import { fetchDownloadTagMeta } from './fetchTagMeta'
+import { generateMusicTags } from '@renderer/utils/ipc'
+import { isAiTagConfigValid } from '@renderer/utils/ai'
 
 const waitingUpdateTasks = new Map<string, LX.Download.ListItem>()
 let timer: NodeJS.Timeout | null = null
@@ -151,6 +153,8 @@ const saveMeta = (downloadInfo: LX.Download.ListItem) => {
   if (downloadInfo.metadata.quality === 'ape') return
   const isUseOtherSource = appSetting['download.isUseOtherSource']
   const musicInfo = downloadInfo.metadata.musicInfo
+  const shouldWriteAiTags = appSetting['download.isEmbedAiTags'] && isAiTagConfigValid()
+  const shouldFetchLyric = appSetting['download.isEmbedLyric'] || shouldWriteAiTags
   const tasks: [Promise<string | null>, Promise<LX.Player.LyricInfo | null>, Promise<Awaited<ReturnType<typeof fetchDownloadTagMeta>>>] = [
     appSetting['download.isEmbedPic']
       ? musicInfo.meta.picUrl
@@ -160,7 +164,7 @@ const saveMeta = (downloadInfo: LX.Download.ListItem) => {
           return null
         })
       : Promise.resolve(null),
-    appSetting['download.isEmbedLyric']
+    shouldFetchLyric
       ? getLyricInfo({ musicInfo, isRefresh: false, allowToggleSource: isUseOtherSource }).catch(err => {
         console.log(err)
         return null
@@ -178,7 +182,24 @@ const saveMeta = (downloadInfo: LX.Download.ListItem) => {
       }
     }),
   ]
-  void Promise.all(tasks).then(([imgUrl, lyrics, tagMeta]) => {
+  Promise.all(tasks).then(async([imgUrl, lyrics, tagMeta]) => {
+    let customTags: string | null = null
+    if (shouldWriteAiTags) {
+      try {
+        const { tags } = await generateMusicTags({
+          title: musicInfo.name,
+          artist: musicInfo.singer,
+          album: musicInfo.meta.albumName || undefined,
+          genre: tagMeta.genre || undefined,
+          year: tagMeta.year || undefined,
+          comment: tagMeta.comment || undefined,
+          lyrics: lyrics?.lyric || undefined,
+        })
+        if (tags.length) customTags = tags.join('#')
+      } catch (err) {
+        console.log(err)
+      }
+    }
     const info = {
       filePath: downloadInfo.metadata.filePath,
       isEmbedLyricLx: appSetting['download.isEmbedLyricLx'],
@@ -194,8 +215,15 @@ const saveMeta = (downloadInfo: LX.Download.ListItem) => {
       genre: tagMeta.genre || null,
       language: tagMeta.language || null,
       comment: tagMeta.comment || null,
+      CUSTOM_TAGS: customTags,
     }
-    void window.lx.worker.download.writeMeta(info, lyrics ?? { lyric: '' }, getProxy())
+    // 未开启嵌入歌词时，不把歌词写入音频文件
+    const lyricPayload = appSetting['download.isEmbedLyric']
+      ? (lyrics ?? { lyric: '' })
+      : { lyric: '' }
+    await window.lx.worker.download.writeMeta(info, lyricPayload, getProxy())
+  }).catch(err => {
+    console.log(err)
   })
 }
 

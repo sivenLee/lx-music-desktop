@@ -576,6 +576,11 @@ declare global {
       'download.isEmbedLyricR': boolean
 
       /**
+       * 下载完成后是否调用 AI 生成标签并写入音频文件
+       */
+      'download.isEmbedAiTags': boolean
+
+      /**
        * 歌曲源不可用时，是否启用换源下载
        */
       'download.isUseOtherSource': boolean

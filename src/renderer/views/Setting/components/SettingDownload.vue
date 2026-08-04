@@ -49,6 +49,15 @@ dd
     base-checkbox(id="setting_download_isEmbedLyricR" :disabled="!appSetting['download.isEmbedLyric']" :model-value="appSetting['download.isEmbedLyricR']" :label="$t('setting__download_embed_rlyric')" @update:model-value="updateSetting({'download.isEmbedLyricR': $event})")
   .gap-top
     base-checkbox(id="setting_download_isEmbedLyricLx" :disabled="!appSetting['download.isEmbedLyric']" :model-value="appSetting['download.isEmbedLyricLx']" :label="$t('setting__download_embed_lxlyric')" @update:model-value="updateSetting({'download.isEmbedLyricLx': $event})")
+  .gap-top
+    base-checkbox(
+      id="setting_download_isEmbedAiTags"
+      :disabled="!isAiTagConfigValid"
+      :model-value="appSetting['download.isEmbedAiTags']"
+      :label="$t('setting__download_embed_ai_tags')"
+      @update:model-value="handleUpdateEmbedAiTags"
+    )
+    svg-icon.help-icon(name="help-circle-outline" :aria-label="$t('setting__download_embed_ai_tags_tip')")
 dd(:aria-label="$t('setting__download_lyric_title')")
   h3#download_lyric {{ $t('setting__download_lyric') }}
   .gap-top
@@ -71,17 +80,31 @@ dd
 </template>
 
 <script>
-import { computed } from '@common/utils/vueTools'
+import { computed, watch } from '@common/utils/vueTools'
 // import { getSystemFonts } from '@renderer/utils/tools'
 import { showSelectDialog, openDirInExplorer } from '@renderer/utils/ipc'
 import { useI18n } from '@renderer/plugins/i18n'
 import { appSetting, updateSetting } from '@renderer/store/setting'
 import { dialog } from '@renderer/plugins/Dialog'
+import { isAiTagConfigValid as checkAiTagConfigValid } from '@renderer/utils/ai'
 
 export default {
   name: 'SettingDownload',
   setup() {
     const t = useI18n()
+
+    const isAiTagConfigValid = computed(() => checkAiTagConfigValid(appSetting))
+
+    watch(isAiTagConfigValid, (valid) => {
+      if (!valid && appSetting['download.isEmbedAiTags']) {
+        updateSetting({ 'download.isEmbedAiTags': false })
+      }
+    })
+
+    const handleUpdateEmbedAiTags = (value) => {
+      if (value && !checkAiTagConfigValid(appSetting)) return
+      updateSetting({ 'download.isEmbedAiTags': value })
+    }
 
     const handleChangeSavePath = () => {
       void showSelectDialog({
@@ -126,6 +149,8 @@ export default {
       lrcFormatList,
       maxNums,
       handleUpdateMaxNum,
+      isAiTagConfigValid,
+      handleUpdateEmbedAiTags,
     }
   },
 }
