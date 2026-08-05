@@ -1008,6 +1008,24 @@ export const localMusicWriteMusicMeta = async(params: {
   }, LX.Music.MusicInfoLocal>(LOCAL_MUSIC_EVENT_NAME.write_music_meta, params)
 }
 
+export const localMusicExportSongs = async(params: {
+  dirPath: string
+  musicFiles: LX.Music.MusicInfoLocal[]
+}): Promise<{
+  filePath: string
+  fileName: string
+  count: number
+}> => {
+  return rendererInvoke<{
+    dirPath: string
+    musicFiles: LX.Music.MusicInfoLocal[]
+  }, {
+    filePath: string
+    fileName: string
+    count: number
+  }>(LOCAL_MUSIC_EVENT_NAME.export_songs, params)
+}
+
 export const generateMusicTags = async(params: {
   title: string
   artist: string

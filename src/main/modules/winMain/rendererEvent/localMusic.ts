@@ -856,4 +856,37 @@ export default () => {
 
     return musicInfo
   })
+
+  mainHandle<{
+    dirPath: string
+    musicFiles: LX.Music.MusicInfoLocal[]
+  }, {
+    filePath: string
+    fileName: string
+    count: number
+  }>(LOCAL_MUSIC_EVENT_NAME.export_songs, async({ params }) => {
+    const dirPath = params.dirPath?.trim()
+    if (!dirPath) throw new Error('Directory path is required')
+    if (!await checkPath(dirPath)) throw new Error('Directory not exists')
+    const musicFiles = Array.isArray(params.musicFiles) ? params.musicFiles.filter(Boolean) : []
+    if (!musicFiles.length) throw new Error('No songs selected')
+
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const now = new Date()
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    const fileName = `lx_music_songs_${timestamp}_${musicFiles.length}.json`
+    const filePath = path.join(dirPath, fileName)
+    const cache: LocalMusicSongsCache = {
+      version: LOCAL_MUSIC_CACHE_VERSION,
+      dirPath,
+      generatedAt: Date.now(),
+      musicFiles,
+    }
+    await writeJsonFileAtomic(filePath, cache)
+    return {
+      filePath,
+      fileName,
+      count: musicFiles.length,
+    }
+  })
 }

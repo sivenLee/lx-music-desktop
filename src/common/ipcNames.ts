@@ -28,6 +28,7 @@ const modules = {
     remove_music_from_playlist: 'local_music_remove_music_from_playlist',
     save_playlist_order: 'local_music_save_playlist_order',
     write_music_meta: 'local_music_write_music_meta',
+    export_songs: 'local_music_export_songs',
   },
   player: {
     invoke_play_music: 'play_music',

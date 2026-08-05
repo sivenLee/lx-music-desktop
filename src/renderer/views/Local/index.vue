@@ -45,6 +45,14 @@
         >
           移出列表
         </button>
+        <button
+          :class="$style.button"
+          :disabled="!selectedMusicCount"
+          title="批量导出"
+          @click="handleExportSelectedMusics"
+        >
+          批量导出
+        </button>
       </div>
     </div>
     <div :class="$style.header">
@@ -187,7 +195,7 @@
 </template>
 
 <script lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick } from '@common/utils/vueTools'
+import { ref, computed, onMounted, onBeforeUnmount, watch, reactive, nextTick, toRaw } from '@common/utils/vueTools'
 import { onActivated } from 'vue'
 import { debounce } from '@common/utils'
 import { useI18n } from '@renderer/plugins/i18n'
@@ -208,7 +216,7 @@ import PlaylistSourceEditor from './components/PlaylistSourceEditor.vue'
 import MusicAddModal from './components/MusicAddModal.vue'
 import { playMusicInfo } from '@renderer/store/player/state'
 import { isLocalMusicMetaEditable } from '@renderer/utils/music'
-import { openDirInExplorer } from '@renderer/utils/ipc'
+import { openDirInExplorer, localMusicExportSongs } from '@renderer/utils/ipc'
 import { checkPath } from '@common/utils/nodejs'
 
 export default {
@@ -557,6 +565,23 @@ export default {
       }
     }
 
+    const handleExportSelectedMusics = async() => {
+      const musicFiles = multiSelect.selectedMusicInfos.value
+      const dirPath = currentDirectoryPath.value
+      if (!musicFiles.length || !dirPath) return
+      if (!await dialog.confirm(`确认导出已选的${musicFiles.length}首歌曲？`)) return
+      try {
+        const result = await localMusicExportSongs({
+          dirPath,
+          musicFiles: musicFiles.map(item => toRaw(item)),
+        })
+        await dialog(`已成功导出 ${result.count} 首歌曲到「${result.fileName}」`)
+      } catch (err) {
+        console.error(err)
+        await dialog(err instanceof Error ? `导出失败：${err.message}` : '导出失败')
+      }
+    }
+
     const handleStartCreatePlaylist = () => {
       playlistEditorMode.value = 'create'
       playlistEditorName.value = ''
@@ -672,6 +697,7 @@ export default {
       handlePlayMusic,
       handleShowSelectedMusicAddModal,
       handleRemoveSelectedMusics,
+      handleExportSelectedMusics,
     }
   },
 }
