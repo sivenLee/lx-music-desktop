@@ -75,6 +75,7 @@
       :dir-path="musicMetaEditorDirPath"
       @change="handleMusicMetaEditorChange"
       @saved="handleMusicMetaSaved"
+      @play="handleMusicMetaEditorPlay"
     />
   </div>
 </template>
@@ -98,6 +99,8 @@ import { appSetting } from '@renderer/store/setting'
 import { formatMusicName } from '@renderer/utils'
 import { dialog } from '@renderer/plugins/Dialog'
 import { isLocalMusicMetaEditable } from '@renderer/utils/music'
+import { playList } from '@renderer/core/player'
+import { LIST_IDS } from '@common/constants'
 
 export default {
   name: 'Download',
@@ -182,6 +185,20 @@ export default {
       musicMetaEditorTarget.value = musicInfo
       const index = musicMetaEditorList.value.findIndex(item => item.meta.filePath === musicInfo.meta.filePath || item.id === musicInfo.id)
       if (index >= 0) musicMetaEditorList.value.splice(index, 1, musicInfo)
+    }
+
+    const handleMusicMetaEditorPlay = (musicInfo) => {
+      const filePath = musicInfo?.meta?.filePath
+      if (!filePath) return
+      let index = list.value.findIndex(task => task.metadata?.filePath === filePath)
+      if (index < 0) {
+        // 当前 Tab 过滤后找不到时，回退到完整下载列表
+        index = listAll.value.findIndex(task => task.metadata?.filePath === filePath)
+        if (index < 0) return
+        playList(LIST_IDS.DOWNLOAD, index)
+        return
+      }
+      handlePlayMusic(index)
     }
 
     const {
@@ -295,6 +312,7 @@ export default {
       musicMetaEditorDirPath,
       handleMusicMetaEditorChange,
       handleMusicMetaSaved,
+      handleMusicMetaEditorPlay,
 
       removeAllSelect,
 

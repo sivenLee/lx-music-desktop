@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" width="420px" max-width="420px" @close="handleClose">
+  <material-modal :show="visible" teleport="#view" width="420px" max-width="420px" @close="handleClose">
     <div :class="$style.playlistEditor">
       <div :class="$style.playlistEditorTitle">{{ title }}</div>
       <input
@@ -43,7 +43,7 @@ export default {
       default: '',
     },
   },
-  emits: ['update:visible', 'renamed'],
+  emits: ['update:visible', 'renamed', 'created'],
   setup(props: {
     visible: boolean
     mode: 'create' | 'rename'
@@ -53,6 +53,7 @@ export default {
     emit: {
       (event: 'update:visible', value: boolean): void
       (event: 'renamed', payload: { oldPath: string, newPath: string }): void
+      (event: 'created', playlistPath: string): void
     }
   }) {
     const localMusic = useLocalMusic()
@@ -68,8 +69,9 @@ export default {
 
     const handleConfirm = async() => {
       if (props.mode === 'create') {
-        const ok = await localMusic.createPlaylist(name.value)
-        if (!ok) return
+        const playlistPath = await localMusic.createPlaylist(name.value)
+        if (!playlistPath) return
+        emit('created', playlistPath)
         handleClose()
         return
       }

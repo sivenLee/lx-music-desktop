@@ -1,6 +1,6 @@
 <template>
   <teleport :to="teleport">
-    <div v-if="showModal" ref="dom_container" :class="$style.container">
+    <div v-if="showModal" ref="dom_container" :class="$style.container" :style="containerStyle">
       <transition enter-active-class="animated fadeIn" leave-active-class="animated fadeOut">
         <div v-show="showContent" :class="[$style.modal, {[$style.filter]: filter}]" @click="bgClose && close()">
           <transition :enter-active-class="inClass" :leave-active-class="outClass" @after-enter="$emit('after-enter', $event)" @after-leave="handleAfterLeave">
@@ -186,6 +186,12 @@ export default {
       }
       return style
     },
+    containerStyle() {
+      const count = typeof this.modalCount == 'number' ? this.modalCount : 0
+      return {
+        zIndex: 99 + count,
+      }
+    },
     filter() {
       return this.teleport == '#root' || this.modalCount > 1
     },
@@ -343,7 +349,6 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 99;
 }
 
 .modal {

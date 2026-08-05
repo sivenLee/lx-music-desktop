@@ -309,26 +309,26 @@ export function useLocalMusic() {
   const createPlaylist = async(name: string) => {
     if (!state.value.currentDirectory) {
       await dialog('请先选择目录')
-      return false
+      return null
     }
     let trimName: string
     try {
       trimName = assertPlaylistName(name)
     } catch (err) {
       await dialog('播放列表名称不合法')
-      return false
+      return null
     }
     const exists = state.value.playlistFiles.some(p => getPlaylistName(p).toLowerCase() === trimName.toLowerCase())
     if (exists) {
       await dialog('播放列表名称已存在')
-      return false
+      return null
     }
     try {
       const playlistPath = await localMusicCreatePlaylist({
         dirPath: state.value.currentDirectory.path,
         name: trimName,
       })
-      state.value.playlistFiles.push(playlistPath)
+      state.value.playlistFiles = [...state.value.playlistFiles, playlistPath]
       state.value.playlistCounts = {
         ...state.value.playlistCounts,
         [playlistPath]: 0,
@@ -337,11 +337,11 @@ export function useLocalMusic() {
         ...state.value.playlistInvalidCounts,
         [playlistPath]: 0,
       }
-      return true
+      return playlistPath
     } catch (err) {
       console.error('Failed to create playlist:', err)
       await dialog('创建播放列表失败')
-      return false
+      return null
     }
   }
 

@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" width="720px" max-width="86%" height="78%" @close="handleClose">
+  <material-modal :show="visible" teleport="#view" width="720px" max-width="86%" height="78%" @close="handleClose">
     <main :class="$style.playlistSourceEditor">
       <div :class="$style.playlistSourceHeader">
         <div :class="$style.playlistSourceTitle">编辑播放列表</div>

@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" movable width="920px" max-width="92%" height="78%" max-height="680px" @close="handleClose">
+  <material-modal :show="visible" movable teleport="#view" width="920px" max-width="92%" height="78%" max-height="680px" @close="handleClose">
     <main :class="$style.modal">
       <h2 :class="$style.title" data-modal-drag>编辑元信息</h2>
       <div :class="$style.filePath" :title="form.filePath">{{ form.filePath || '-' }}</div>
@@ -148,6 +148,15 @@
       <div :class="$style.footer">
         <div :class="$style.footerLeft">
           <button type="button" :class="$style.btn" :disabled="!canGoPrev || isSaving" @click="handlePrev">上一首</button>
+          <button
+            type="button"
+            :class="$style.btn"
+            :disabled="!musicInfo || isLoading || isSaving"
+            title="播放"
+            @click="handlePlay"
+          >
+            播放
+          </button>
           <button type="button" :class="$style.btn" :disabled="!canGoNext || isSaving" @click="handleNext">下一首</button>
           <button type="button" :class="$style.btn" :disabled="isLoading || isSaving || !form.filePath" @click="handleReload">
             重新加载
@@ -170,6 +179,41 @@
           <button type="button" :class="$style.btn" :disabled="isLoading || isSaving || !form.filePath" @click="isSearchVisible = true">
             综合搜索
           </button>
+          <div ref="directSearchWrapRef" :class="$style.splitBtn">
+            <button
+              type="button"
+              :class="[$style.btn, $style.splitBtnMain]"
+              :disabled="isLoading || isSaving || isDirectSearching || !form.filePath"
+              title="使用 QQ 音源一键补齐"
+              @click="handleDirectSearch()"
+            >
+              {{ isDirectSearching ? '搜索中…' : '一键补齐' }}
+            </button>
+            <button
+              type="button"
+              :class="[$style.btn, $style.splitBtnArrow]"
+              :disabled="isLoading || isSaving || isDirectSearching || !form.filePath"
+              title="选择音源"
+              :aria-expanded="isSourceMenuVisible"
+              @click.stop="handleToggleSourceMenu"
+            >
+              <span :class="[$style.splitBtnCaret, { [$style.splitBtnCaretOpen]: isSourceMenuVisible }]" aria-hidden="true" />
+            </button>
+            <div
+              v-if="isSourceMenuVisible"
+              :class="$style.sourceMenu"
+            >
+              <button
+                v-for="source in searchSources"
+                :key="source.id"
+                type="button"
+                :class="$style.sourceMenuItem"
+                @click="handleDirectSearch(source.id)"
+              >
+                {{ source.name }}
+              </button>
+            </div>
+          </div>
         </div>
         <div :class="$style.footerRight">
           <button type="button" :class="$style.btn" :disabled="isSaving" @click="handleClose">取消</button>
@@ -196,7 +240,7 @@
 </template>
 
 <script lang="ts">
-import { computed, nextTick, reactive, ref, watch } from '@common/utils/vueTools'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from '@common/utils/vueTools'
 import {
   clearLocalMusicMetadataCache,
   getCoverInfoFromSource,
@@ -210,6 +254,7 @@ import { dialog } from '@renderer/plugins/Dialog'
 import { appSetting } from '@renderer/store/setting'
 import MusicMetaSearchModal from './MusicMetaSearchModal.vue'
 import type { MusicMetaSearchResultPayload } from '../musicMetaEditTypes'
+import { buildMusicMetaSearchPayload, getMusicMetaSearchSources, searchMusicMetaResults } from '../musicMetaSearch'
 
 const OVERRIDE_KEYS = [
   'title',
@@ -288,7 +333,7 @@ export default {
       default: '',
     },
   },
-  emits: ['update:visible', 'change', 'saved'],
+  emits: ['update:visible', 'change', 'saved', 'play'],
   setup(props: {
     visible: boolean
     musicInfo: LX.Music.MusicInfoLocal | null
@@ -299,6 +344,7 @@ export default {
       (event: 'update:visible', value: boolean): void
       (event: 'change', musicInfo: LX.Music.MusicInfoLocal): void
       (event: 'saved', musicInfo: LX.Music.MusicInfoLocal): void
+      (event: 'play', musicInfo: LX.Music.MusicInfoLocal): void
     }
   }) {
     const form = reactive(createEmptyForm())
@@ -308,6 +354,10 @@ export default {
     const isGeneratingTags = ref(false)
     const error = ref('')
     const isSearchVisible = ref(false)
+    const isDirectSearching = ref(false)
+    const isSourceMenuVisible = ref(false)
+    const directSearchWrapRef = ref<HTMLElement | null>(null)
+    const searchSources = getMusicMetaSearchSources()
     const isDirty = ref(false)
     const suppressDirty = ref(false)
     const overrideAllCheckboxRef = ref<HTMLInputElement | null>(null)
@@ -406,6 +456,11 @@ export default {
     const handleNext = () => {
       if (!canGoNext.value) return
       void switchTo(editableMusicList.value[currentIndex.value + 1])
+    }
+
+    const handlePlay = () => {
+      if (!props.musicInfo) return
+      emit('play', props.musicInfo)
     }
 
     const handleToggleAllOverrides = () => {
@@ -515,6 +570,74 @@ export default {
       isDirty.value = true
     }
 
+    const handleDirectSearch = async(source?: LX.OnlineSource) => {
+      if (isDirectSearching.value || isLoading.value || isSaving.value) return
+      if (!form.title.trim() && !form.artist.trim() && !form.album.trim()) {
+        await dialog('请至少填写标题或艺术家')
+        return
+      }
+      const targetSource = source ?? (
+        searchSources.some(item => item.id === 'tx')
+          ? 'tx'
+          : searchSources[0]?.id
+      )
+      if (!targetSource) {
+        await dialog('暂无可用搜索源')
+        return
+      }
+      isSourceMenuVisible.value = false
+      isDirectSearching.value = true
+      try {
+        const results = await searchMusicMetaResults({
+          title: form.title,
+          artist: form.artist,
+          album: form.album,
+          source: targetSource,
+          limit: 5,
+        })
+        const first = results[0]
+        if (!first) {
+          await dialog('暂无搜索结果')
+          return
+        }
+        await handleSearchSelect(await buildMusicMetaSearchPayload(first))
+      } catch (err) {
+        console.log(err)
+        await dialog(err instanceof Error ? err.message : '搜索失败')
+      } finally {
+        isDirectSearching.value = false
+      }
+    }
+
+    const handleSourceMenuClickOutside = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (!directSearchWrapRef.value?.contains(target)) {
+        isSourceMenuVisible.value = false
+      }
+    }
+
+    const handleToggleSourceMenu = () => {
+      if (isLoading.value || isSaving.value || isDirectSearching.value || !form.filePath) return
+      isSourceMenuVisible.value = !isSourceMenuVisible.value
+    }
+
+    watch(() => props.visible, (visible) => {
+      if (!visible) isSourceMenuVisible.value = false
+    })
+
+    watch(isSourceMenuVisible, (visible) => {
+      if (visible) {
+        document.addEventListener('mousedown', handleSourceMenuClickOutside)
+        return
+      }
+      document.removeEventListener('mousedown', handleSourceMenuClickOutside)
+    })
+
+    onBeforeUnmount(() => {
+      document.removeEventListener('mousedown', handleSourceMenuClickOutside)
+    })
+
     const handleSave = async() => {
       if (!props.musicInfo || !props.dirPath || !form.filePath) return
       isSaving.value = true
@@ -581,6 +704,10 @@ export default {
       isGeneratingTags,
       error,
       isSearchVisible,
+      isDirectSearching,
+      isSourceMenuVisible,
+      directSearchWrapRef,
+      searchSources,
       canGoPrev,
       canGoNext,
       overrideAllCheckboxRef,
@@ -589,12 +716,15 @@ export default {
       handleClose,
       handlePrev,
       handleNext,
+      handlePlay,
       handleToggleAllOverrides,
       handleReload,
       handlePickCover,
       handleClearCover,
       handleGenerateTags,
       handleSearchSelect,
+      handleDirectSearch,
+      handleToggleSourceMenu,
       handleSave,
     }
   },
@@ -851,6 +981,109 @@ export default {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.splitBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--color-primary-alpha-700);
+  border-radius: 4px;
+  overflow: visible;
+  background: var(--color-button-background);
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: var(--color-primary-alpha-500);
+
+    .splitBtnArrow {
+      border-left-color: var(--color-primary-alpha-500) !important;
+    }
+  }
+
+  .splitBtnMain,
+  .splitBtnArrow {
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    height: 30px !important;
+    margin: 0;
+    line-height: 30px;
+
+    &:hover:not(:disabled) {
+      background: var(--color-button-background-hover) !important;
+    }
+
+    &:active:not(:disabled) {
+      background: var(--color-button-background-active) !important;
+    }
+
+    &:disabled {
+      opacity: 1;
+      cursor: not-allowed;
+    }
+  }
+
+  .splitBtnMain {
+    padding: 0 12px 0 14px !important;
+  }
+
+  .splitBtnArrow {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 28px !important;
+    min-width: 28px !important;
+    padding: 0 !important;
+    color: var(--color-font);
+    border-left: 1px solid var(--color-primary-alpha-700) !important;
+    transition: border-left-color 0.2s ease;
+  }
+}
+
+.splitBtnCaret {
+  display: block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 0.2s ease;
+}
+
+.splitBtnCaretOpen {
+  transform: rotate(180deg);
+}
+
+.sourceMenu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  min-width: 100%;
+  padding: 4px 0;
+  border-radius: 4px;
+  border: 1px solid var(--color-primary-alpha-700);
+  background: var(--color-content-background);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 14%);
+}
+
+.sourceMenuItem {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  color: var(--color-font);
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--color-primary-background-hover);
+  }
 }
 
 .btn {

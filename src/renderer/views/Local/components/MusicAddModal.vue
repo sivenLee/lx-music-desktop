@@ -1,8 +1,19 @@
 <template>
-  <material-modal :show="visible" max-width="70%" min-width="200px" @close="handleClose">
+  <material-modal :show="visible" teleport="#view" max-width="70%" min-width="200px" @close="handleClose">
     <main :class="$style.musicAddModal">
       <h2>{{ title }}</h2>
-      <div v-if="playlistFiles.length" class="scroll" :class="$style.musicAddBtnContent">
+      <div class="scroll" :class="$style.musicAddBtnContent">
+        <button
+          type="button"
+          :class="[$style.musicAddBtn, $style.newList]"
+          :aria-label="$t('lists__new_list_btn')"
+          title="新建播放列表"
+          @click="handleCreate"
+        >
+          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" viewBox="0 0 42 42" space="preserve">
+            <use xlink:href="#icon-addTo" />
+          </svg>
+        </button>
         <button
           v-for="playlist in playlistFiles"
           :key="playlist"
@@ -12,9 +23,6 @@
         >
           {{ getPlaylistName(playlist) }}
         </button>
-      </div>
-      <div v-else :class="$style.musicAddEmpty">
-        {{ $t('no_item') }}
       </div>
     </main>
   </material-modal>
@@ -40,7 +48,7 @@ export default {
       default: () => [],
     },
   },
-  emits: ['update:visible', 'select'],
+  emits: ['update:visible', 'select', 'create'],
   setup(props: {
     visible: boolean
     musicInfos: LX.Music.MusicInfoLocal[]
@@ -49,6 +57,7 @@ export default {
     emit: {
       (event: 'update:visible', value: boolean): void
       (event: 'select', playlistPath: string): void
+      (event: 'create'): void
     }
   }) {
     const { getPlaylistName } = useLocalMusic()
@@ -62,11 +71,16 @@ export default {
       emit('select', playlistPath)
     }
 
+    const handleCreate = () => {
+      emit('create')
+    }
+
     return {
       title,
       getPlaylistName,
       handleClose,
       handleSelect,
+      handleCreate,
     }
   },
 }
@@ -100,11 +114,13 @@ export default {
 }
 
 .musicAddBtn {
+  position: relative;
   box-sizing: border-box;
   margin-left: 15px;
   margin-bottom: 15px;
   min-width: 160px;
   height: 36px;
+  line-height: 36px;
   padding: 0 10px;
   border-radius: @form-radius;
   border: 1px solid var(--color-primary-background);
@@ -119,9 +135,22 @@ export default {
   }
 }
 
-.musicAddEmpty {
-  padding: 0 15px 15px;
-  text-align: center;
-  color: var(--color-font-label);
+.newList {
+  border: 1px dashed var(--color-primary-font-hover);
+  color: var(--color-primary-font-hover);
+  opacity: .7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    height: 18px;
+    width: 18px;
+  }
+
+  &:hover {
+    opacity: 1;
+    background: var(--color-primary-background-hover);
+  }
 }
 </style>

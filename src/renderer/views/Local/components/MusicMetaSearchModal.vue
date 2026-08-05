@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" movable width="960px" max-width="94%" height="78%" max-height="660px" @close="handleClose">
+  <material-modal :show="visible" movable teleport="#view" width="960px" max-width="94%" height="78%" max-height="660px" @close="handleClose">
     <main :class="$style.modal">
       <h2 :class="$style.title" data-modal-drag>综合搜索</h2>
       <div :class="$style.searchBar">
@@ -78,29 +78,14 @@
 
 <script lang="ts">
 import { ref, watch } from '@common/utils/vueTools'
-import musicSdk from '@renderer/utils/musicSdk'
-import { toNewMusicInfo } from '@common/utils/tools'
-import { getPicPath, getLyricInfo } from '@renderer/core/music'
 import type { MusicMetaSearchResultPayload } from '../musicMetaEditTypes'
-
-interface SearchResultItem {
-  name: string
-  singer: string
-  albumName: string
-  interval?: string
-  source: LX.OnlineSource
-  songmid?: string | number
-  hash?: string
-  img?: string
-  lrc?: string | null
-  year?: string
-  track?: string
-  disc?: string
-  genre?: string
-  language?: string
-  types?: Array<{ type: string, size?: string }>
-  [key: string]: any
-}
+import {
+  buildMusicMetaSearchPayload,
+  getDefaultMusicMetaSearchSource,
+  getMusicMetaSearchSources,
+  searchMusicMetaResults,
+  type MusicMetaSearchResultItem,
+} from '../musicMetaSearch'
 
 export default {
   name: 'MusicMetaSearchModal',
@@ -137,35 +122,30 @@ export default {
     const searchTitle = ref('')
     const searchArtist = ref('')
     const searchAlbum = ref('')
-    const searchSource = ref<LX.OnlineSource>('tx')
-    const results = ref<SearchResultItem[]>([])
+    const searchSource = ref<LX.OnlineSource>(getDefaultMusicMetaSearchSource())
+    const results = ref<MusicMetaSearchResultItem[]>([])
     const isSearching = ref(false)
     const isApplying = ref(false)
     const error = ref('')
     const hasAutoSearched = ref(false)
     const coverSizeMap = ref<Record<string, string>>({})
 
-    const searchSources = (musicSdk.sources as Array<{ id: string, name: string }>)
-      .filter(item => item.id !== 'xm' && musicSdk[item.id as LX.OnlineSource]?.musicSearch)
-      .map(item => ({
-        id: item.id as LX.OnlineSource,
-        name: item.name,
-      }))
+    const searchSources = getMusicMetaSearchSources()
 
     const sourceNameMap = Object.fromEntries(
       searchSources.map(item => [item.id, item.name]),
     ) as Record<string, string>
 
-    const getResultKey = (item: SearchResultItem, index: number) => {
+    const getResultKey = (item: MusicMetaSearchResultItem, index: number) => {
       return `${item.source}_${item.songmid ?? item.hash ?? index}`
     }
 
-    const getQualityText = (item: SearchResultItem) => {
+    const getQualityText = (item: MusicMetaSearchResultItem) => {
       if (!Array.isArray(item.types) || !item.types.length) return ''
       return item.types.map(type => type.type).filter(Boolean).slice(0, 3).join(' / ')
     }
 
-    const getTrackDiscText = (item: SearchResultItem) => {
+    const getTrackDiscText = (item: MusicMetaSearchResultItem) => {
       const track = `${item.track ?? ''}`.trim()
       const disc = `${item.disc ?? ''}`.trim()
       if (track && disc) return `Track ${track} / Disc ${disc}`
@@ -174,13 +154,13 @@ export default {
       return ''
     }
 
-    const getCommentText = (item: SearchResultItem) => {
+    const getCommentText = (item: MusicMetaSearchResultItem) => {
       if (typeof item.remark == 'string' && item.remark.trim()) return item.remark.trim()
       if (typeof item.comment == 'string' && item.comment.trim()) return item.comment.trim()
       return '-'
     }
 
-    const handleCoverLoad = (event: Event, item: SearchResultItem) => {
+    const handleCoverLoad = (event: Event, item: MusicMetaSearchResultItem) => {
       const target = event.target
       if (!(target instanceof HTMLImageElement)) return
       const index = results.value.indexOf(item)
@@ -198,79 +178,40 @@ export default {
     }
 
     const handleSearch = async() => {
-      const name = searchTitle.value.trim()
-      const singer = searchArtist.value.trim()
-      if (!name && !singer && !searchAlbum.value.trim()) {
-        error.value = '请至少填写标题或艺术家'
-        return
-      }
-      const source = searchSource.value
-      const api = musicSdk[source]?.musicSearch
-      if (!api?.search) {
-        error.value = '当前搜索源不可用'
-        return
-      }
       isSearching.value = true
       error.value = ''
       results.value = []
       coverSizeMap.value = {}
       try {
-        const keyword = `${name || searchAlbum.value.trim()} ${singer}`.trim()
-        const data = await api.search(keyword, 1, 5) as { list?: SearchResultItem[] } | null
-        const albumKeyword = searchAlbum.value.trim().toLowerCase()
-        const merged = (data?.list ?? []).filter(item => item?.name)
-        results.value = albumKeyword
-          ? [
-              ...merged.filter(item => `${item.albumName ?? ''}`.toLowerCase().includes(albumKeyword)),
-              ...merged.filter(item => !`${item.albumName ?? ''}`.toLowerCase().includes(albumKeyword)),
-            ]
-          : merged
+        results.value = await searchMusicMetaResults({
+          title: searchTitle.value,
+          artist: searchArtist.value,
+          album: searchAlbum.value,
+          source: searchSource.value,
+          limit: 5,
+        })
         console.log('[MusicMetaSearch] results', {
-          source,
-          keyword,
+          source: searchSource.value,
           total: results.value.length,
           list: results.value,
         })
         if (!results.value.length) error.value = '暂无搜索结果'
       } catch (err) {
         console.log(err)
-        error.value = `搜索失败：${err instanceof Error ? err.message : '未知错误'}`
+        error.value = err instanceof Error ? err.message : '搜索失败'
+        if (!error.value.startsWith('搜索失败') && !error.value.includes('请至少') && !error.value.includes('不可用')) {
+          error.value = `搜索失败：${error.value}`
+        }
       } finally {
         isSearching.value = false
       }
     }
 
-    const handleSelect = async(item: SearchResultItem) => {
+    const handleSelect = async(item: MusicMetaSearchResultItem) => {
       if (isApplying.value) return
       isApplying.value = true
       try {
-        const musicInfo = toNewMusicInfo(item) as LX.Music.MusicInfoOnline
-        let coverUrl = item.img ?? ''
-        let lyrics = ''
-        try {
-          const picUrl = await getPicPath({ musicInfo, isRefresh: true })
-          if (picUrl) coverUrl = picUrl
-        } catch (err) {
-          console.log(err)
-        }
-        try {
-          const lyricInfo = await getLyricInfo({ musicInfo, isRefresh: true })
-          lyrics = lyricInfo.lyric ?? ''
-        } catch (err) {
-          console.log(err)
-        }
-        emit('select', {
-          title: item.name ?? '',
-          artist: item.singer ?? '',
-          album: item.albumName ?? '',
-          year: item.year ?? '',
-          track: item.track ?? '',
-          disc: item.disc ?? '',
-          genre: item.genre ?? '',
-          language: item.language ?? '',
-          coverUrl,
-          lyrics,
-        })
+        emit('select', await buildMusicMetaSearchPayload(item))
         handleClose()
       } finally {
         isApplying.value = false
@@ -291,11 +232,13 @@ export default {
       searchArtist.value = props.artist
       searchAlbum.value = props.album
       if (!searchSources.some(item => item.id === searchSource.value)) {
-        searchSource.value = searchSources.some(item => item.id === 'tx') ? 'tx' : (searchSources[0]?.id ?? 'tx')
+        searchSource.value = getDefaultMusicMetaSearchSource()
       }
       if (!hasAutoSearched.value) {
         hasAutoSearched.value = true
-        void handleSearch()
+        handleSearch().catch((err) => {
+          console.error(err)
+        })
       }
     })
 

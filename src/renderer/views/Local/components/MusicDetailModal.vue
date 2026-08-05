@@ -1,5 +1,5 @@
 <template>
-  <material-modal :show="visible" movable width="900px" max-width="86%" max-height="82%" @close="handleClose">
+  <material-modal :show="visible" movable teleport="#view" width="900px" max-width="86%" max-height="82%" @close="handleClose">
     <main :class="$style.musicDetailModal">
       <h2 :class="$style.musicDetailTitle">{{ musicDetailTitle }}</h2>
       <div v-if="isLoading" :class="$style.musicDetailLoading">

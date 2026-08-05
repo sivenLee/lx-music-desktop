@@ -155,6 +155,7 @@
       :playlist-path="editingPlaylistPath"
       :initial-name="playlistEditorName"
       @renamed="handlePlaylistRenamed"
+      @created="handlePlaylistCreated"
     />
     <PlaylistSourceEditor
       v-model:visible="isPlaylistSourceEditorVisible"
@@ -166,6 +167,7 @@
       :music-infos="selectedAddMusicInfos"
       :playlist-files="localMusicState.playlistFiles"
       @select="handleAddMusicToPlaylist"
+      @create="handleStartCreatePlaylist"
       @update:visible="handleMusicAddVisibleChange"
     />
     <MusicDetailModal
@@ -179,6 +181,7 @@
       :dir-path="currentDirectoryPath"
       @change="handleMusicMetaEditorChange"
       @saved="handleMusicMetaSaved"
+      @play="handlePlayMusic"
     />
   </div>
 </template>
@@ -546,6 +549,14 @@ export default {
       isPlaylistEditorVisible.value = true
     }
 
+    const handlePlaylistCreated = () => {
+      nextTick(() => {
+        playlistSidebarComponentRef.value?.refreshPlaylistSort()
+      }).catch((err) => {
+        console.error(err)
+      })
+    }
+
     const handlePlaylistRenamed = ({ oldPath, newPath }: { oldPath: string, newPath: string }) => {
       localQueue.handlePlaylistRenamed({ oldPath, newPath })
     }
@@ -631,6 +642,7 @@ export default {
       playlistEditorName,
       editingPlaylistPath,
       handleStartCreatePlaylist,
+      handlePlaylistCreated,
       handlePlaylistRenamed,
       isMusicAddVisible,
       selectedAddMusicInfos,
