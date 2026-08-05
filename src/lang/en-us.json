@@ -155,6 +155,7 @@
   "lists__import_part_desc": "Select list file",
   "lists__new_list_btn": "Create list",
   "lists__new_list_input": "New list...",
+  "lists__play_queue": "Play Queue",
   "lists__remove": "Remove",
   "lists__remove_music_tip": "Do you really want to remove the selected {len} songs?",
   "lists__remove_tip": "Do you really want to remove \"{name}\"?",

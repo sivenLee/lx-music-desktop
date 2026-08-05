@@ -208,6 +208,8 @@ import PlaylistSourceEditor from './components/PlaylistSourceEditor.vue'
 import MusicAddModal from './components/MusicAddModal.vue'
 import { playMusicInfo } from '@renderer/store/player/state'
 import { isLocalMusicMetaEditable } from '@renderer/utils/music'
+import { openDirInExplorer } from '@renderer/utils/ipc'
+import { checkPath } from '@common/utils/nodejs'
 
 export default {
   name: 'LocalMusic',
@@ -294,6 +296,10 @@ export default {
         name: '编辑元信息',
         action: 'editMeta',
         disabled: !rightClickMusicInfo.value || !isLocalMusicMetaEditable(rightClickMusicInfo.value.meta.filePath),
+      },
+      {
+        name: t('list__file'),
+        action: 'file',
       },
       {
         name: t('list__remove'),
@@ -511,6 +517,15 @@ export default {
         case 'editMeta':
           handleShowMusicMetaEditor(musicInfo)
           break
+        case 'file': {
+          const filePath = musicInfo.meta.filePath
+          if (!filePath || !await checkPath(filePath)) {
+            await dialog('本地文件不存在，可能已被移动或删除')
+            return
+          }
+          openDirInExplorer(filePath)
+          break
+        }
         case 'remove': {
           const playlistPath = localMusic.state.value.currentPlaylist
           if (!playlistPath) return

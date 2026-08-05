@@ -99,16 +99,37 @@
     <search-list :list="list" :visible="isShowSearchBar" @action="handleMusicSearchAction" />
     <music-sort-modal v-model:show="isShowMusicSortModal" :music-info="selectedSortMusicInfo" :selected-num="selectedNum" @confirm="sortMusic" />
     <music-toggle-modal v-model:show="isShowMusicToggleModal" :music-info="selectedToggleMusicInfo" @toggle="toggleSource" />
+    <MusicDetailModal
+      v-model:visible="isMusicDetailVisible"
+      :music-info="musicDetailTarget"
+    />
+    <MusicMetaEditorModal
+      v-model:visible="isMusicMetaEditorVisible"
+      :music-info="musicMetaEditorTarget"
+      :music-list="musicMetaEditorList"
+      :dir-path="musicMetaEditorDirPath"
+      @change="handleMusicMetaEditorChange"
+      @saved="handleMusicMetaSaved"
+      @play="handleMusicMetaEditorPlay"
+    />
     <base-menu v-model="isShowItemMenu" :menus="menus" :xy="menuLocation" item-name="name" @menu-click="handleMenuClick" />
   </div>
 </template>
 
 <script>
 import { clipboardWriteText } from '@common/utils/electron'
+import { checkPath, dirname } from '@common/utils/nodejs'
 import { assertApiSupport } from '@renderer/store/utils'
+import { ref } from '@common/utils/vueTools'
+import { dialog } from '@renderer/plugins/Dialog'
+import { openDirInExplorer } from '@renderer/utils/ipc'
+import { isLocalMusicMetaEditable } from '@renderer/utils/music'
+import { updateListMusics } from '@renderer/store/list/action'
 import SearchList from './components/SearchList.vue'
 import MusicSortModal from './components/MusicSortModal.vue'
 import MusicToggleModal from './components/MusicToggleModal.vue'
+import MusicDetailModal from '@renderer/views/Local/components/MusicDetailModal.vue'
+import MusicMetaEditorModal from '@renderer/views/Local/components/MusicMetaEditorModal.vue'
 import useListInfo from './useListInfo'
 import useList from './useList'
 import useMenu from './useMenu'
@@ -127,6 +148,8 @@ export default {
     SearchList,
     MusicSortModal,
     MusicToggleModal,
+    MusicDetailModal,
+    MusicMetaEditorModal,
   },
   props: {
     listId: {
@@ -216,6 +239,80 @@ export default {
       handleRemoveMusic,
     } = useMusicActions({ props, list, removeAllSelect, selectedList })
 
+    const isMusicDetailVisible = ref(false)
+    const musicDetailTarget = ref(null)
+    const isMusicMetaEditorVisible = ref(false)
+    const musicMetaEditorTarget = ref(null)
+    const musicMetaEditorList = ref([])
+    const musicMetaEditorDirPath = ref('')
+
+    const resolveLocalMusic = async(index) => {
+      const musicInfo = list.value[index]
+      if (!musicInfo || musicInfo.source !== 'local') {
+        await dialog('仅本地歌曲可用')
+        return null
+      }
+      const filePath = musicInfo.meta.filePath
+      if (!filePath || !await checkPath(filePath)) {
+        await dialog('本地文件不存在，可能已被移动或删除')
+        return null
+      }
+      return musicInfo
+    }
+
+    const handleShowSongDetail = async(index) => {
+      const musicInfo = await resolveLocalMusic(index)
+      if (!musicInfo) return
+      musicDetailTarget.value = musicInfo
+      isMusicDetailVisible.value = true
+    }
+
+    const handleShowMusicMetaEditor = async(index) => {
+      const musicInfo = await resolveLocalMusic(index)
+      if (!musicInfo) return
+      if (!isLocalMusicMetaEditable(musicInfo.meta.filePath)) {
+        await dialog('仅支持编辑 MP3 / FLAC 格式文件')
+        return
+      }
+      musicMetaEditorTarget.value = musicInfo
+      musicMetaEditorList.value = list.value.filter(item => (
+        item.source === 'local' && isLocalMusicMetaEditable(item.meta.filePath)
+      ))
+      musicMetaEditorDirPath.value = dirname(musicInfo.meta.filePath)
+      isMusicMetaEditorVisible.value = true
+    }
+
+    const handleOpenFile = async(index) => {
+      const musicInfo = await resolveLocalMusic(index)
+      if (!musicInfo) return
+      openDirInExplorer(musicInfo.meta.filePath)
+    }
+
+    const handleMusicMetaEditorChange = (musicInfo) => {
+      musicMetaEditorTarget.value = musicInfo
+    }
+
+    const handleMusicMetaSaved = (musicInfo) => {
+      const original = musicMetaEditorTarget.value
+      const updated = original && original.id !== musicInfo.id
+        ? { ...musicInfo, id: original.id }
+        : musicInfo
+      musicMetaEditorTarget.value = updated
+      const listIndex = musicMetaEditorList.value.findIndex(item => (
+        item.meta.filePath === updated.meta.filePath || item.id === updated.id
+      ))
+      if (listIndex >= 0) musicMetaEditorList.value.splice(listIndex, 1, updated)
+      void updateListMusics([{ id: props.listId, musicInfo: updated }])
+    }
+
+    const handleMusicMetaEditorPlay = (musicInfo) => {
+      const index = list.value.findIndex(item => (
+        item.id === musicInfo.id || item.meta?.filePath === musicInfo.meta?.filePath
+      ))
+      if (index < 0) return
+      handlePlayMusic(index)
+    }
+
     const {
       menus,
       menuLocation,
@@ -238,6 +335,9 @@ export default {
       handleCopyName,
       handleDislikeMusic,
       handleRemoveMusic,
+      handleShowSongDetail,
+      handleShowMusicMetaEditor,
+      handleOpenFile,
     })
 
     const {
@@ -354,6 +454,16 @@ export default {
       isShowMusicToggleModal,
       selectedToggleMusicInfo,
       toggleSource,
+
+      isMusicDetailVisible,
+      musicDetailTarget,
+      isMusicMetaEditorVisible,
+      musicMetaEditorTarget,
+      musicMetaEditorList,
+      musicMetaEditorDirPath,
+      handleMusicMetaEditorChange,
+      handleMusicMetaSaved,
+      handleMusicMetaEditorPlay,
     }
   },
 }

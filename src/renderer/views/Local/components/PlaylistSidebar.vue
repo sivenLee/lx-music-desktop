@@ -176,9 +176,9 @@ export default {
 @import '@renderer/assets/styles/layout.less';
 
 .sidebar {
-  width: 18%;
-  min-width: 220px;
-  flex: 0 0 18%;
+  width: 16%;
+  min-width: 200px;
+  flex: 0 0 16%;
   border-right: 1px solid var(--color-primary-alpha-900);
   display: flex;
   flex-direction: column;

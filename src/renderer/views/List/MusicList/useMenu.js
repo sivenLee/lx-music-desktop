@@ -2,6 +2,7 @@ import { computed, ref, shallowReactive, reactive, nextTick } from '@common/util
 import musicSdk from '@renderer/utils/musicSdk'
 import { useI18n } from '@renderer/plugins/i18n'
 import { hasDislike } from '@renderer/core/dislikeList'
+import { isLocalMusicMetaEditable } from '@renderer/utils/music'
 
 export default ({
   assertApiSupport,
@@ -19,6 +20,9 @@ export default ({
   handleCopyName,
   handleDislikeMusic,
   handleRemoveMusic,
+  handleShowSongDetail,
+  handleShowMusicMetaEditor,
+  handleOpenFile,
 }) => {
   const itemMenuControl = reactive({
     play: true,
@@ -33,6 +37,8 @@ export default ({
     dislike: true,
     remove: true,
     sourceDetail: true,
+    isLocal: false,
+    editMeta: false,
   })
   const t = useI18n()
   const menuLocation = shallowReactive({ x: 0, y: 0 })
@@ -86,6 +92,22 @@ export default ({
         disabled: !itemMenuControl.sourceDetail,
       },
       {
+        name: '歌曲详情',
+        action: 'songDetail',
+        hide: !itemMenuControl.isLocal,
+      },
+      {
+        name: '编辑元信息',
+        action: 'editMeta',
+        hide: !itemMenuControl.isLocal,
+        disabled: !itemMenuControl.editMeta,
+      },
+      {
+        name: t('list__file'),
+        action: 'file',
+        hide: !itemMenuControl.isLocal,
+      },
+      {
         name: t('list__search'),
         action: 'search',
         disabled: !itemMenuControl.search,
@@ -108,6 +130,8 @@ export default ({
     // itemMenuControl.play =
     //   itemMenuControl.playLater =
     itemMenuControl.download = assertApiSupport(musicInfo.source) && musicInfo.source != 'local'
+    itemMenuControl.isLocal = musicInfo.source === 'local'
+    itemMenuControl.editMeta = itemMenuControl.isLocal && isLocalMusicMetaEditable(musicInfo.meta.filePath)
 
     itemMenuControl.dislike = !hasDislike(musicInfo)
 
@@ -166,6 +190,22 @@ export default ({
         break
       case 'sourceDetail':
         handleOpenMusicDetail(index)
+        break
+      case 'songDetail':
+        handleShowSongDetail(index).catch(err => {
+          console.log(err)
+        })
+        break
+      case 'editMeta':
+        handleShowMusicMetaEditor(index).catch(err => {
+          console.log(err)
+        })
+        break
+      case 'file':
+        handleOpenFile(index).catch(err => {
+          console.log(err)
+        })
+        break
     }
   }
 

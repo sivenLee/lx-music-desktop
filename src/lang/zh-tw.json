@@ -155,6 +155,7 @@
   "lists__import_part_desc": "選取清單檔案",
   "lists__new_list_btn": "建立清單",
   "lists__new_list_input": "新清單...",
+  "lists__play_queue": "播放列隊",
   "lists__remove": "移除",
   "lists__remove_music_tip": "你真的要移除所選的 {len} 首歌曲嗎？",
   "lists__remove_tip": "你真的想要移除「{name}」嗎？",

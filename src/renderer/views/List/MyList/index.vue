@@ -17,6 +17,20 @@
     </div>
     <ul ref="dom_lists_list" class="scroll" :class="[$style.listsContent, { [$style.sortable]: isModDown }]">
       <li
+        class="default-list play-queue-list"
+        :class="[$style.listsItem, { [$style.active]: isPlayQueueActive }]"
+        :aria-label="$t('lists__play_queue')"
+        :aria-selected="isPlayQueueActive"
+        @click="handleOpenPlayQueue"
+      >
+        <span :class="$style.listsLabel">
+          <transition name="list-active">
+            <svg-icon v-if="isPlayQueueActive" name="angle-right-solid" :class="$style.activeIcon" />
+          </transition>
+          {{ $t('lists__play_queue') }}
+        </span>
+      </li>
+      <li
         class="default-list" :class="[$style.listsItem, {[$style.active]: defaultList.id == listId}, {[$style.clicked]: rightClickItemIndex == -2}, {[$style.fetching]: fetchingListStatus[defaultList.id]}]"
         :aria-label="$t(defaultList.name)" :aria-selected="defaultList.id == listId"
         @contextmenu="handleListsItemRigthClick($event, -2)" @click="handleListToggle(defaultList.id)"
@@ -88,8 +102,9 @@ import ListUpdateModal from './components/ListUpdateModal.vue'
 
 import { defaultList, loveList, userLists, fetchingListStatus } from '@renderer/store/list/state'
 import { removeUserList } from '@renderer/store/list/action'
+import { playInfo, playMusicInfo } from '@renderer/store/player/state'
 
-import { ref, watch } from '@common/utils/vueTools'
+import { computed, ref, watch } from '@common/utils/vueTools'
 import { useRouter } from '@common/utils/vueRouter'
 import { LIST_IDS } from '@common/constants'
 
@@ -196,6 +211,27 @@ export default {
       }).catch(_ => _)
     }
 
+    const isPlayQueueActive = computed(() => {
+      const listId = playMusicInfo.listId
+      return !!listId &&
+        listId != LIST_IDS.DOWNLOAD &&
+        playInfo.playIndex != -1 &&
+        listId == props.listId
+    })
+
+    const handleOpenPlayQueue = () => {
+      const listId = playMusicInfo.listId
+      if (!listId || listId == LIST_IDS.DOWNLOAD || !playMusicInfo.musicInfo) return
+      if (playInfo.playIndex == -1) return
+      void router.push({
+        path: '/list',
+        query: {
+          id: listId,
+          scrollIndex: playInfo.playIndex,
+        },
+      })
+    }
+
     const handleMenuClick = (action) => {
       if (rightClickItemIndex.value < -2) return
       let index = rightClickItemIndex.value
@@ -242,6 +278,8 @@ export default {
       menus,
       menuLocation,
       handleListToggle,
+      isPlayQueueActive,
+      handleOpenPlayQueue,
       isModDown,
       hideMenu: handleMenuClick,
     }
