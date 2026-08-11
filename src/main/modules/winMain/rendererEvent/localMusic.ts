@@ -831,6 +831,7 @@ export default () => {
     dirPath: string
     filePath: string
     meta: LX.Music.MusicFileMeta
+    skipSongsCache?: boolean
   }, LX.Music.MusicInfoLocal>(LOCAL_MUSIC_EVENT_NAME.write_music_meta, async({ params }) => {
     const ext = extname(params.filePath).replace(/^\./, '').toLowerCase()
     if (ext !== 'mp3' && ext !== 'flac') throw new Error('Only MP3 and FLAC are supported')
@@ -841,17 +842,19 @@ export default () => {
     const musicInfo = await createLocalMusicInfo(params.filePath)
     if (!musicInfo) throw new Error('Failed to read music info after writing meta')
 
-    const songsCache = await readSongsCache(params.dirPath)
-    if (songsCache) {
-      const targetPath = path.resolve(params.filePath)
-      const index = songsCache.musicFiles.findIndex(item => path.resolve(item.meta.filePath) === targetPath)
-      if (index >= 0) {
-        songsCache.musicFiles[index] = musicInfo
-      } else {
-        songsCache.musicFiles.push(musicInfo)
+    if (!params.skipSongsCache) {
+      const songsCache = await readSongsCache(params.dirPath)
+      if (songsCache) {
+        const targetPath = path.resolve(params.filePath)
+        const index = songsCache.musicFiles.findIndex(item => path.resolve(item.meta.filePath) === targetPath)
+        if (index >= 0) {
+          songsCache.musicFiles[index] = musicInfo
+        } else {
+          songsCache.musicFiles.push(musicInfo)
+        }
+        songsCache.generatedAt = Date.now()
+        await writeSongsCache(songsCache)
       }
-      songsCache.generatedAt = Date.now()
-      await writeSongsCache(songsCache)
     }
 
     return musicInfo
@@ -864,6 +867,11 @@ export default () => {
     filePath: string
     fileName: string
     count: number
+    files: Array<{
+      filePath: string
+      fileName: string
+      count: number
+    }>
   }>(LOCAL_MUSIC_EVENT_NAME.export_songs, async({ params }) => {
     const dirPath = params.dirPath?.trim()
     if (!dirPath) throw new Error('Directory path is required')
@@ -871,22 +879,61 @@ export default () => {
     const musicFiles = Array.isArray(params.musicFiles) ? params.musicFiles.filter(Boolean) : []
     if (!musicFiles.length) throw new Error('No songs selected')
 
+    const EXPORT_CHUNK_SIZE = 300
     const pad = (n: number) => String(n).padStart(2, '0')
     const now = new Date()
     const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-    const fileName = `lx_music_songs_${timestamp}_${musicFiles.length}.json`
-    const filePath = path.join(dirPath, fileName)
-    const cache: LocalMusicSongsCache = {
-      version: LOCAL_MUSIC_CACHE_VERSION,
-      dirPath,
-      generatedAt: Date.now(),
-      musicFiles,
+    const needSplit = musicFiles.length > EXPORT_CHUNK_SIZE
+    const files: Array<{
+      filePath: string
+      fileName: string
+      count: number
+    }> = []
+
+    for (let offset = 0, chunkIndex = 1; offset < musicFiles.length; offset += EXPORT_CHUNK_SIZE, chunkIndex++) {
+      const chunk = musicFiles.slice(offset, offset + EXPORT_CHUNK_SIZE)
+      const baseName = `lx_music_songs_${timestamp}_${chunk.length}`
+      const fileName = needSplit ? `${baseName}_${chunkIndex}.json` : `${baseName}.json`
+      const filePath = path.join(dirPath, fileName)
+      const cache: LocalMusicSongsCache = {
+        version: LOCAL_MUSIC_CACHE_VERSION,
+        dirPath,
+        generatedAt: Date.now(),
+        musicFiles: chunk,
+      }
+      await writeJsonFileAtomic(filePath, cache)
+      files.push({
+        filePath,
+        fileName,
+        count: chunk.length,
+      })
     }
-    await writeJsonFileAtomic(filePath, cache)
+
     return {
-      filePath,
-      fileName,
+      filePath: files[0].filePath,
+      fileName: files[0].fileName,
       count: musicFiles.length,
+      files,
     }
+  })
+
+  mainHandle<string, unknown>(LOCAL_MUSIC_EVENT_NAME.read_json_file, async({ params: filePath }) => {
+    const targetPath = `${filePath ?? ''}`.trim()
+    if (!targetPath) throw new Error('File path is required')
+    if (!await checkPath(targetPath)) throw new Error('File not exists')
+    try {
+      return JSON.parse(await fs.promises.readFile(targetPath, 'utf8')) as unknown
+    } catch (err) {
+      throw new Error(err instanceof Error ? `读取 JSON 失败：${err.message}` : '读取 JSON 失败')
+    }
+  })
+
+  mainHandle<{
+    filePath: string
+    data: unknown
+  }>(LOCAL_MUSIC_EVENT_NAME.write_json_file, async({ params }) => {
+    const targetPath = `${params.filePath ?? ''}`.trim()
+    if (!targetPath) throw new Error('File path is required')
+    await writeJsonFileAtomic(targetPath, params.data)
   })
 }

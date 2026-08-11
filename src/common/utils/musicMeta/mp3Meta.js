@@ -69,8 +69,14 @@ const resolveCoverPath = async(filePath, apic) => {
 
 const handleWriteMeta = (meta, filePath) => {
   const id3 = buildId3Meta(meta)
-  if (meta.APIC) id3.APIC = meta.APIC
-  NodeID3.write(id3, filePath)
+  if (meta.APIC) {
+    id3.APIC = meta.APIC
+    // 显式写入封面时用 write 整段替换标签
+    NodeID3.write(id3, filePath)
+    return
+  }
+  // 未传封面时用 update，保留文件中已有的 APIC，避免批量导入等场景丢封面
+  NodeID3.update(id3, filePath)
 }
 
 module.exports = async(filePath, meta, proxy) => {

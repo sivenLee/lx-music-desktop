@@ -1000,11 +1000,13 @@ export const localMusicWriteMusicMeta = async(params: {
   dirPath: string
   filePath: string
   meta: LX.Music.MusicFileMeta
+  skipSongsCache?: boolean
 }): Promise<LX.Music.MusicInfoLocal> => {
   return rendererInvoke<{
     dirPath: string
     filePath: string
     meta: LX.Music.MusicFileMeta
+    skipSongsCache?: boolean
   }, LX.Music.MusicInfoLocal>(LOCAL_MUSIC_EVENT_NAME.write_music_meta, params)
 }
 
@@ -1015,6 +1017,11 @@ export const localMusicExportSongs = async(params: {
   filePath: string
   fileName: string
   count: number
+  files: Array<{
+    filePath: string
+    fileName: string
+    count: number
+  }>
 }> => {
   return rendererInvoke<{
     dirPath: string
@@ -1023,7 +1030,26 @@ export const localMusicExportSongs = async(params: {
     filePath: string
     fileName: string
     count: number
+    files: Array<{
+      filePath: string
+      fileName: string
+      count: number
+    }>
   }>(LOCAL_MUSIC_EVENT_NAME.export_songs, params)
+}
+
+export const localMusicReadJsonFile = async(filePath: string): Promise<unknown> => {
+  return rendererInvoke<string, unknown>(LOCAL_MUSIC_EVENT_NAME.read_json_file, filePath)
+}
+
+export const localMusicWriteJsonFile = async(params: {
+  filePath: string
+  data: unknown
+}): Promise<void> => {
+  return rendererInvoke<{
+    filePath: string
+    data: unknown
+  }>(LOCAL_MUSIC_EVENT_NAME.write_json_file, params)
 }
 
 export const generateMusicTags = async(params: {

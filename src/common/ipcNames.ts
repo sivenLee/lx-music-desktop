@@ -29,6 +29,8 @@ const modules = {
     save_playlist_order: 'local_music_save_playlist_order',
     write_music_meta: 'local_music_write_music_meta',
     export_songs: 'local_music_export_songs',
+    read_json_file: 'local_music_read_json_file',
+    write_json_file: 'local_music_write_json_file',
   },
   player: {
     invoke_play_music: 'play_music',

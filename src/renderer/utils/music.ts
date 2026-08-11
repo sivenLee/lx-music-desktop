@@ -155,22 +155,18 @@ export const createLocalMusicInfo = async(path: string): Promise<LX.Music.MusicI
   }
 }
 
-let prevFileInfo: {
-  path: string
-  promise: Promise<LX.MusicMetadataModule.IAudioMetadata | null>
-} = {
-  path: '',
-  promise: Promise.resolve(null),
-}
+let metadataPromiseMap = new Map<string, Promise<LX.MusicMetadataModule.IAudioMetadata | null>>()
 const getFileMetadata = async(path: string) => {
-  if (prevFileInfo.path == path) return prevFileInfo.promise
-  prevFileInfo.path = path
-  return prevFileInfo.promise = checkPath(path).then(async(isExist) => {
+  const cached = metadataPromiseMap.get(path)
+  if (cached) return cached
+  const promise = checkPath(path).then(async(isExist) => {
     return isExist ? import('music-metadata').then(async({ parseFile }) => parseFile(path)).catch(err => {
       console.log(err)
       return null
     }) : null
   })
+  metadataPromiseMap.set(path, promise)
+  return promise
 }
 
 export interface LocalMusicDetailField {
@@ -400,12 +396,11 @@ export const isLocalMusicMetaEditable = (filePath: string) => {
 }
 
 export const clearLocalMusicMetadataCache = (filePath?: string) => {
-  if (!filePath || prevFileInfo.path === filePath) {
-    prevFileInfo = {
-      path: '',
-      promise: Promise.resolve(null),
-    }
+  if (filePath) {
+    metadataPromiseMap.delete(filePath)
+    return
   }
+  metadataPromiseMap = new Map()
 }
 
 const guessTitleArtistFromFileName = (filePath: string) => {
@@ -504,14 +499,16 @@ export const getCoverInfoFromSource = async(source: string): Promise<LocalMusicD
   }
 }
 
-export const getLocalMusicEditInfo = async(filePath: string): Promise<LocalMusicEditInfo | null> => {
+export const getLocalMusicEditInfo = async(filePath: string, options?: {
+  skipCover?: boolean
+}): Promise<LocalMusicEditInfo | null> => {
   if (!await checkPath(filePath)) return null
   clearLocalMusicMetadataCache(filePath)
 
   const [metadata, lyricInfo, picture, stats] = await Promise.all([
     getFileMetadata(filePath),
     getLocalMusicFileLyric(filePath),
-    getLocalMusicFilePic(filePath),
+    options?.skipCover ? Promise.resolve(null) : getLocalMusicFilePic(filePath),
     getFileStats(filePath),
   ])
   const common = metadata?.common

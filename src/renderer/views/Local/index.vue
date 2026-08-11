@@ -53,6 +53,13 @@
         >
           批量导出
         </button>
+        <button
+          :class="$style.button"
+          title="批量导入"
+          @click="isBatchImportVisible = true"
+        >
+          批量导入
+        </button>
       </div>
     </div>
     <div :class="$style.header">
@@ -191,6 +198,10 @@
       @saved="handleMusicMetaSaved"
       @play="handlePlayMusic"
     />
+    <MusicBatchImportModal
+      v-model:visible="isBatchImportVisible"
+      @saved="handleBatchImportSaved"
+    />
   </div>
 </template>
 
@@ -211,6 +222,7 @@ import PlaylistSidebar from './components/PlaylistSidebar.vue'
 import MusicTable from './components/MusicTable.vue'
 import MusicDetailModal from './components/MusicDetailModal.vue'
 import MusicMetaEditorModal from './components/MusicMetaEditorModal.vue'
+import MusicBatchImportModal from './components/MusicBatchImportModal.vue'
 import PlaylistNameEditor from './components/PlaylistNameEditor.vue'
 import PlaylistSourceEditor from './components/PlaylistSourceEditor.vue'
 import MusicAddModal from './components/MusicAddModal.vue'
@@ -229,6 +241,7 @@ export default {
     MusicTable,
     MusicDetailModal,
     MusicMetaEditorModal,
+    MusicBatchImportModal,
     PlaylistNameEditor,
     PlaylistSourceEditor,
     MusicAddModal,
@@ -328,6 +341,7 @@ export default {
     const musicDetailTarget = ref<LX.Music.MusicInfoLocal | null>(null)
     const isMusicMetaEditorVisible = ref(false)
     const musicMetaEditorTarget = ref<LX.Music.MusicInfoLocal | null>(null)
+    const isBatchImportVisible = ref(false)
 
     const handleToggleDirectoryPopover = () => {
       if (localMusic.state.value.isRefreshing) return
@@ -497,6 +511,12 @@ export default {
       musicMetaEditorTarget.value = musicInfo
     }
 
+    const handleBatchImportSaved = (musicInfos: LX.Music.MusicInfoLocal[]) => {
+      musicInfos.forEach(musicInfo => {
+        localMusic.applyUpdatedMusicInfo(musicInfo)
+      })
+    }
+
     const handleAddMusicToPlaylist = async(playlistPath: string) => {
       if (!selectedAddMusicInfos.value.length) return
       const updatedList = await localMusic.addMusicsToPlaylist(playlistPath, selectedAddMusicInfos.value)
@@ -575,7 +595,12 @@ export default {
           dirPath,
           musicFiles: musicFiles.map(item => toRaw(item)),
         })
-        await dialog(`已成功导出 ${result.count} 首歌曲到「${result.fileName}」`)
+        if (result.files.length > 1) {
+          const fileNames = result.files.map(item => item.fileName).join('\n')
+          await dialog(`已成功导出 ${result.count} 首歌曲，共 ${result.files.length} 个文件：\n${fileNames}`)
+        } else {
+          await dialog(`已成功导出 ${result.count} 首歌曲到「${result.fileName}」`)
+        }
       } catch (err) {
         console.error(err)
         await dialog(err instanceof Error ? `导出失败：${err.message}` : '导出失败')
@@ -694,6 +719,8 @@ export default {
       musicMetaEditorTarget,
       handleMusicMetaEditorChange,
       handleMusicMetaSaved,
+      isBatchImportVisible,
+      handleBatchImportSaved,
       handlePlayMusic,
       handleShowSelectedMusicAddModal,
       handleRemoveSelectedMusics,
