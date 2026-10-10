@@ -17,6 +17,7 @@
     <common-volume-btn />
     <common-toggle-play-mode-btn />
     <common-pitch-shifter-btn />
+    <common-playback-rate-btn />
     <common-list-add-modal v-model:show="isShowAddMusicTo" :music-info="playMusicInfo.musicInfo" />
   </div>
 </template>

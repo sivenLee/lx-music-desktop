@@ -248,6 +248,7 @@
   "player__prev": "上一首",
   "player__refresh_url": "URL 过期，正在刷新 URL...",
   "player__sound_effect": "音效设置（实验性）",
+  "player__sound_effect_playbar_label": "音效设置({num}半音)",
   "player__sound_effect_biquad_filter": "均衡器",
   "player__sound_effect_biquad_filter_preset_classical": "古典",
   "player__sound_effect_biquad_filter_preset_dance": "舞曲",

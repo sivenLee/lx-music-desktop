@@ -1,8 +1,17 @@
 <template>
   <teleport :to="teleport">
-    <div v-if="showModal" ref="dom_container" :class="$style.container" :style="containerStyle">
+    <div
+      v-if="showModal"
+      ref="dom_container"
+      :class="[$style.container, { [$style.noOverlayContainer]: !overlay }]"
+      :style="containerStyle"
+    >
       <transition enter-active-class="animated fadeIn" leave-active-class="animated fadeOut">
-        <div v-show="showContent" :class="[$style.modal, {[$style.filter]: filter}]" @click="bgClose && close()">
+        <div
+          v-show="showContent"
+          :class="[$style.modal, { [$style.filter]: filter, [$style.noOverlay]: !overlay }]"
+          @click="overlay && bgClose && close()"
+        >
           <transition :enter-active-class="inClass" :leave-active-class="outClass" @after-enter="$emit('after-enter', $event)" @after-leave="handleAfterLeave">
             <div
               v-show="showContent"
@@ -75,6 +84,11 @@ export default {
     height: {
       type: String,
       default: 'auto',
+    },
+    /** 是否显示蒙版（灰度背景、整页 dim）；关闭后仅保留弹窗本体，不阻挡下方操作 */
+    overlay: {
+      type: Boolean,
+      default: true,
     },
   },
   emits: ['after-enter', 'after-leave', 'close'],
@@ -193,6 +207,7 @@ export default {
       }
     },
     filter() {
+      if (!this.overlay) return false
       return this.teleport == '#root' || this.modalCount > 1
     },
   },
@@ -229,10 +244,12 @@ export default {
         this.modalCount = ++modalCount
         this.showModal = true
         void nextTick(() => {
-          const node = this.$refs.dom_container.parentNode
-          if (!node.classList.contains('show-modal')) {
-            node.classList.add('show-modal')
-            this.isAddedClass = true
+          if (this.overlay) {
+            const node = this.$refs.dom_container.parentNode
+            if (!node.classList.contains('show-modal')) {
+              node.classList.add('show-modal')
+              this.isAddedClass = true
+            }
           }
           this.showContent = true
         })
@@ -349,6 +366,10 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
+
+  &.noOverlayContainer {
+    pointer-events: none;
+  }
 }
 
 .modal {
@@ -366,6 +387,10 @@ export default {
 
   &.filter {
     backdrop-filter: grayscale(70%);
+  }
+
+  &.noOverlay {
+    pointer-events: none;
   }
 
   // &:before {
@@ -393,6 +418,7 @@ export default {
   flex-flow: column nowrap;
   z-index: 100;
   background-color: var(--color-content-background);
+  pointer-events: auto;
 
   &.dragging {
     user-select: none;

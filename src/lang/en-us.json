@@ -248,6 +248,7 @@
   "player__prev": "Prev",
   "player__refresh_url": "Music URL expired, refreshing...",
   "player__sound_effect": "Sound options (EXPERIMENTAL)",
+  "player__sound_effect_playbar_label": "Sound options ({num} semitones)",
   "player__sound_effect_biquad_filter": "Equalizer",
   "player__sound_effect_biquad_filter_preset_classical": "Classical",
   "player__sound_effect_biquad_filter_preset_dance": "Dance",

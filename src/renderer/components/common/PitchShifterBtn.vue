@@ -2,7 +2,8 @@
   <material-popup-btn :class="$style.btnContent">
     <button
       :class="[$style.btn, { [$style.active]: pitchSemitones != 0 }]"
-      :aria-label="`${$t('player__sound_effect_pitch_shifter')}${semitoneAriaLabel}`"
+      :aria-label="playbarLabel"
+      @click.stop="openSoundEffectModal"
     >
       <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" width="90%" viewBox="0 0 24 24" space="preserve">
         <use xlink:href="#icon-tune-variant" />
@@ -25,11 +26,13 @@
       </div>
     </template>
   </material-popup-btn>
+  <SoundEffectModal v-model:show="soundEffectVisible" />
 </template>
 
 <script setup>
-import { computed } from '@common/utils/vueTools'
+import { computed, ref } from '@common/utils/vueTools'
 import { useI18n } from '@renderer/plugins/i18n'
+import SoundEffectModal from './SoundEffectBtn/SoundEffectModal.vue'
 import usePitchShifterSetting from '@renderer/utils/compositions/usePitchShifterSetting'
 import {
   PITCH_SEMITONE_MAX,
@@ -41,17 +44,19 @@ import {
 const t = useI18n()
 const { pitchSemitones, setPitchSemitones, resetPitch } = usePitchShifterSetting()
 
+const soundEffectVisible = ref(false)
+
+const playbarLabel = computed(() => t('player__sound_effect_playbar_label', {
+  num: formatPitchSemitoneNum(pitchSemitones.value),
+}))
+
 const semitoneLabel = computed(() => t('player__sound_effect_pitch_shifter_preset_semitones', {
   num: formatPitchSemitoneNum(pitchSemitones.value),
 }))
 
-const semitoneAriaLabel = computed(() => (
-  pitchSemitones.value === 0
-    ? ''
-    : t('player__sound_effect_pitch_shifter_preset_semitones', {
-      num: formatPitchSemitoneNum(pitchSemitones.value),
-    })
-))
+const openSoundEffectModal = () => {
+  soundEffectVisible.value = true
+}
 
 const handleUpdateSemitones = (value) => {
   setPitchSemitones(clampPitchSemitones(value)).catch(() => {})
