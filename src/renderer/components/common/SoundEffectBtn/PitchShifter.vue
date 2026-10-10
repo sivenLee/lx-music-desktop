@@ -5,70 +5,49 @@
         {{ $t('player__sound_effect_pitch_shifter') }}
         <svg-icon class="help-icon" name="information-slab-circle-outline" :aria-label="$t('player__sound_effect_pitch_shifter_tip')" />
       </h3>
-      <base-btn min @click="handleSetPreset(1)">{{ $t('player__sound_effect_pitch_shifter_reset_btn') }}</base-btn>
+      <base-btn min @click="handleReset">{{ $t('player__sound_effect_pitch_shifter_reset_btn') }}</base-btn>
     </div>
     <div :class="$style.eqList">
       <div :class="$style.eqItem">
-        <span :class="$style.label">{{ playbackRate.toFixed(2) }}x</span>
-        <base-slider-bar :class="$style.slider" :value="playbackRate * 100" :min="50" :max="150" @change="handleUpdatePlaybackRate" />
+        <span :class="$style.label">{{ semitoneLabel }}</span>
+        <base-slider-bar
+          :class="$style.slider"
+          :value="pitchSemitones"
+          :min="PITCH_SEMITONE_MIN"
+          :max="PITCH_SEMITONE_MAX"
+          :step="1"
+          @change="handleUpdateSemitones"
+        />
       </div>
     </div>
-    <!-- <div :class="$style.saveList">
-      <base-btn v-for="num in semitones" :key="num" min @click="handleSetSemitones(num)">{{ $t(`player__sound_effect_pitch_shifter_preset_semitones`, { num: num > 0 ? `+${num}` : num }) }}</base-btn>
-      <base-btn v-for="item in userPresetList" :key="item.id" min @click="handleSetPreset(item.playbackRate)" @contextmenu="handleRemovePreset(item.id)">{{ item.name }}</base-btn>
-      <AddPitchShifterPresetBtn v-if="userPresetList.length < 31" />
-    </div> -->
   </div>
 </template>
 
 <script setup>
 import { computed } from '@common/utils/vueTools'
-import { setMediaDeviceId } from '@renderer/plugins/player'
-import { appSetting, saveMediaDeviceId, updateSetting } from '@renderer/store/setting'
-// import AddPitchShifterPresetBtn from './AddPitchShifterPresetBtn.vue'
-// import { getUserPitchShifterPresetList, removeUserPitchShifterPreset } from '@renderer/store/soundEffect'
-// import { semitones } from '@renderer/plugins/player'
+import { useI18n } from '@renderer/plugins/i18n'
+import usePitchShifterSetting from '@renderer/utils/compositions/usePitchShifterSetting'
+import {
+  PITCH_SEMITONE_MAX,
+  PITCH_SEMITONE_MIN,
+  clampPitchSemitones,
+  formatPitchSemitoneNum,
+} from '@renderer/utils/pitchShifter'
 
-// const setting = reactive({
-//   enabled: false,
-//   soundR: 5,
-//   speed: 25,
-// })
+const t = useI18n()
+const { pitchSemitones, setPitchSemitones, resetPitch } = usePitchShifterSetting()
 
+const semitoneLabel = computed(() => t('player__sound_effect_pitch_shifter_preset_semitones', {
+  num: formatPitchSemitoneNum(pitchSemitones.value),
+}))
 
-const playbackRate = computed(() => appSetting['player.soundEffect.pitchShifter.playbackRate'])
-
-const handleSetPreset = async(value) => {
-  if (appSetting['player.mediaDeviceId'] != 'default') {
-    await setMediaDeviceId('default').catch(_ => _)
-    saveMediaDeviceId('default')
-  }
-  updateSetting({ 'player.soundEffect.pitchShifter.playbackRate': value })
+const handleUpdateSemitones = (value) => {
+  setPitchSemitones(clampPitchSemitones(value)).catch(() => {})
 }
 
-// const handleSetSemitones = (value) => {
-//   // https://zpl.fi/pitch-shifting-in-web-audio-api/
-//   handleSetPreset(2 ** (value / 12))
-// }
-
-const handleUpdatePlaybackRate = (value) => {
-  value = parseFloat((Math.round(value) / 100).toFixed(2))
-  void handleSetPreset(value)
+const handleReset = () => {
+  resetPitch().catch(() => {})
 }
-
-
-// const userPresetList = ref([])
-
-// const handleRemovePreset = id => {
-//   removeUserPitchShifterPreset(id)
-// }
-
-// onMounted(() => {
-//   getUserPitchShifterPresetList().then(list => {
-//     userPresetList.value = list
-//   })
-// })
-
 
 </script>
 
