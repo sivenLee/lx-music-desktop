@@ -80,11 +80,18 @@ export function useMusicTable({
 
   const sortedMusicFiles = computed(() => sortMusicFiles(filteredMusicFiles.value))
 
+  const getEffectiveBodyViewportHeight = (rawViewportHeight: number) => {
+    const bodyHeight = Math.max(rawViewportHeight - LOCAL_MUSIC_HEADER_HEIGHT, 0)
+    if (bodyHeight > 0) return bodyHeight
+    // 表格未挂载或布局尚未完成时 clientHeight 可能为 0，避免虚拟列表只渲染 overscan 行
+    return Math.max(window.innerHeight * 0.55, LOCAL_MUSIC_ROW_HEIGHT * 24)
+  }
+
   const visibleRange = computed(() => {
     const total = sortedMusicFiles.value.length
     if (!total) return { start: 0, end: 0 }
     const bodyScrollTop = Math.max(musicTableScrollTop.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
-    const viewportHeight = Math.max(musicTableViewportHeight.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
+    const viewportHeight = getEffectiveBodyViewportHeight(musicTableViewportHeight.value)
     const maxStart = Math.max(total - 1, 0)
     const start = Math.min(
       Math.max(Math.floor(bodyScrollTop / LOCAL_MUSIC_ROW_HEIGHT) - LOCAL_MUSIC_OVERSCAN, 0),
@@ -181,6 +188,31 @@ export function useMusicTable({
     musicTableViewportHeight.value = getMusicTableElement()?.clientHeight ?? 0
   }
 
+  let musicTableResizeObserver: ResizeObserver | null = null
+  let observedMusicTableElement: HTMLElement | null = null
+
+  const disconnectMusicTableResizeObserver = () => {
+    musicTableResizeObserver?.disconnect()
+    musicTableResizeObserver = null
+    observedMusicTableElement = null
+  }
+
+  const ensureMusicTableResizeObserver = () => {
+    const tableElement = getMusicTableElement()
+    if (!tableElement) {
+      disconnectMusicTableResizeObserver()
+      return
+    }
+    if (observedMusicTableElement === tableElement && musicTableResizeObserver) return
+    disconnectMusicTableResizeObserver()
+    observedMusicTableElement = tableElement
+    musicTableResizeObserver = new ResizeObserver(() => {
+      updateMusicTableViewport()
+    })
+    musicTableResizeObserver.observe(tableElement)
+    updateMusicTableViewport()
+  }
+
   // KeepAlive 重新挂载后 scrollTop 常被浏览器置 0，需用缓存值恢复，避免虚拟区间与视口错位导致空白
   const syncMusicTableScroll = () => {
     const tableElement = getMusicTableElement()
@@ -199,24 +231,25 @@ export function useMusicTable({
   }
 
   const refreshMusicTableLayout = () => {
-    void nextTick(() => {
+    nextTick(() => {
+      ensureMusicTableResizeObserver()
       if (syncMusicTableScroll()) return
       requestAnimationFrame(() => {
+        ensureMusicTableResizeObserver()
         if (syncMusicTableScroll()) return
-        void nextTick(() => {
+        nextTick(() => {
+          ensureMusicTableResizeObserver()
           syncMusicTableScroll()
-        })
+        }).catch(() => {})
       })
-    })
+    }).catch(() => {})
   }
 
   const resetMusicTableScroll = () => {
     musicTableScrollTop.value = 0
     const tableElement = getMusicTableElement()
     if (tableElement) tableElement.scrollTop = 0
-    void nextTick(() => {
-      updateMusicTableViewport()
-    })
+    refreshMusicTableLayout()
   }
 
   const handleMusicTableScroll = (event: Event) => {
@@ -268,10 +301,10 @@ export function useMusicTable({
     isApplyingDirectoryConfig.value = true
     selectedMusicColumnKeys.value = normalizeSelectedColumnKeys(config.selectedColumnKeys)
     sortState.value = normalizeSortState(config.sortState)
-    void nextTick(() => {
-      updateMusicTableViewport()
+    nextTick(() => {
+      refreshMusicTableLayout()
       isApplyingDirectoryConfig.value = false
-    })
+    }).catch(() => {})
   }, { immediate: true, deep: true })
 
   watch([selectedMusicColumnKeys, sortState], () => {
@@ -279,9 +312,7 @@ export function useMusicTable({
   }, { deep: true })
 
   watch([sortedMusicFiles, visibleColumns], () => {
-    void nextTick(() => {
-      updateMusicTableViewport()
-    })
+    refreshMusicTableLayout()
   }, { deep: true })
 
   watch(() => localMusic.state.value.currentPlaylist, () => {
@@ -303,6 +334,7 @@ export function useMusicTable({
 
   const teardownViewportListeners = () => {
     window.removeEventListener('resize', updateMusicTableViewport)
+    disconnectMusicTableResizeObserver()
   }
 
   return {

@@ -731,6 +731,10 @@ export default {
       if (!val) rightClickMusicInfo.value = null
     })
 
+    watch(() => localMusic.state.value.isLoading, (loading) => {
+      if (!loading) musicTable.refreshMusicTableLayout()
+    })
+
     onMounted(() => {
       document.addEventListener('mousedown', handleClickOutside)
       void localMusic.init().finally(() => {
