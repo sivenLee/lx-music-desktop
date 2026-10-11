@@ -121,3 +121,22 @@ export const parseM3UPlaylistDetail = async(
     invalidFilePaths: Array.from(invalidPathSet),
   }
 }
+
+const stringArraysEqual = (left: string[], right: string[]) => {
+  if (left.length !== right.length) return false
+  return left.every((item, index) => item === right[index])
+}
+
+/** 比较目录 UI 配置是否一致（不含 version / updatedAt 等文件元数据） */
+export const isLocalMusicDirectoryConfigEqual = (
+  left: LX.LocalMusic.LocalMusicDirectoryConfig,
+  right: LX.LocalMusic.LocalMusicDirectoryConfig,
+): boolean => {
+  if (left.currentPlaylistPath !== right.currentPlaylistPath) return false
+  if (left.sortState.key !== right.sortState.key) return false
+  if (left.sortState.order !== right.sortState.order) return false
+  if (!stringArraysEqual(left.selectedColumnKeys, right.selectedColumnKeys)) return false
+  const leftFields = left.keywordSearchFields ?? []
+  const rightFields = right.keywordSearchFields ?? []
+  return stringArraysEqual(leftFields, rightFields)
+}

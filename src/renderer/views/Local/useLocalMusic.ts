@@ -28,6 +28,7 @@ import {
   normalizeKeywordSearchFields,
   type KeywordSearchFieldKey,
 } from './localMusicSearch'
+import { isLocalMusicDirectoryConfigEqual } from '@common/utils/localMusic'
 
 export interface LocalMusicState {
   directories: LX.LocalMusic.LocalMusicDirectory[]
@@ -104,12 +105,17 @@ export function useLocalMusic() {
         ? [...config.keywordSearchFields]
         : [...state.value.keywordSearchFields],
     }
+    if (isLocalMusicDirectoryConfigEqual(plainConfig, state.value.directoryConfig)) {
+      return state.value.directoryConfig
+    }
     const savedConfig = await localMusicSaveDirectoryConfig({
       dirPath: state.value.currentDirectory.path,
       config: plainConfig,
     })
-    state.value.directoryConfig = savedConfig
-    state.value.keywordSearchFields = normalizeKeywordSearchFields(savedConfig.keywordSearchFields)
+    if (!isLocalMusicDirectoryConfigEqual(savedConfig, state.value.directoryConfig)) {
+      state.value.directoryConfig = savedConfig
+      state.value.keywordSearchFields = normalizeKeywordSearchFields(savedConfig.keywordSearchFields)
+    }
     return savedConfig
   }
 

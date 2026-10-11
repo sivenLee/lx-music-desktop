@@ -10,6 +10,7 @@ import {
   parseM3UPlaylistDetail,
   generateId,
   buildLyricsPreview,
+  isLocalMusicDirectoryConfigEqual,
 } from '@common/utils/localMusic'
 import { setMeta } from '@common/utils/musicMeta'
 import {
@@ -212,6 +213,13 @@ const writeDirectoryConfig = async(
   playlistFiles?: string[],
 ) => {
   const normalizedConfig = normalizeDirectoryConfig(config, playlistFiles)
+  const configPath = getDirectoryConfigPath(dirPath)
+  if (await checkPath(configPath)) {
+    const existingConfig = await readDirectoryConfig(dirPath, playlistFiles)
+    if (isLocalMusicDirectoryConfigEqual(existingConfig, normalizedConfig)) {
+      return normalizedConfig
+    }
+  }
   const fileConfig: LocalMusicDirectoryConfigFile = {
     version: LOCAL_MUSIC_CACHE_VERSION,
     dirPath,

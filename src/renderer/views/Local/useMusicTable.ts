@@ -18,6 +18,7 @@ import {
   type LocalMusicColumnDefinition,
   type SortOrder,
 } from './localMusicColumns'
+import { isLocalMusicDirectoryConfigEqual } from '@common/utils/localMusic'
 
 export interface UseMusicTableOptions {
   filteredMusicFiles: ComputedRef<LX.Music.MusicInfoLocal[]>
@@ -246,17 +247,21 @@ export function useMusicTable({
     })
   }
 
+  const buildPersistDirectoryConfig = (): LX.LocalMusic.LocalMusicDirectoryConfig => ({
+    ...localMusic.state.value.directoryConfig,
+    currentPlaylistPath: localMusic.state.value.currentPlaylist,
+    selectedColumnKeys: [...selectedMusicColumnKeys.value],
+    sortState: {
+      key: sortState.value.key,
+      order: sortState.value.order,
+    },
+  })
+
   const persistDirectoryConfig = debounce(() => {
     if (isApplyingDirectoryConfig.value || !selectedDirectory.value) return
-    void localMusic.saveDirectoryConfig({
-      ...localMusic.state.value.directoryConfig,
-      currentPlaylistPath: localMusic.state.value.currentPlaylist,
-      selectedColumnKeys: [...selectedMusicColumnKeys.value],
-      sortState: {
-        key: sortState.value.key,
-        order: sortState.value.order,
-      },
-    })
+    const nextConfig = buildPersistDirectoryConfig()
+    if (isLocalMusicDirectoryConfigEqual(nextConfig, localMusic.state.value.directoryConfig)) return
+    void localMusic.saveDirectoryConfig(nextConfig)
   }, 120)
 
   watch(() => localMusic.state.value.directoryConfig, (config) => {
