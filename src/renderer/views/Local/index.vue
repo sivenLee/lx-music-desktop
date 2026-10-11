@@ -117,6 +117,7 @@
         :on-reorder="handleReorderPlaylists"
         @create="handleStartCreatePlaylist"
         @refresh="handleRefreshDirectory"
+        @locate-playing="handleLocatePlayingMusic"
         @select-all-files="showAllFiles"
         @select-playlist="selectPlaylist"
         @playlist-context-menu="handlePlaylistContextMenu"
@@ -235,7 +236,7 @@ import MusicAddModal from './components/MusicAddModal.vue'
 import { playMusicInfo } from '@renderer/store/player/state'
 import { isLocalMusicMetaEditable, isLocalMusicSaveAsSupported } from '@renderer/utils/music'
 import { openDirInExplorer, localMusicExportSongs } from '@renderer/utils/ipc'
-import { checkPath } from '@common/utils/nodejs'
+import { checkPath, dirname } from '@common/utils/nodejs'
 
 export default {
   name: 'LocalMusic',
@@ -435,6 +436,70 @@ export default {
 
     const handleReorderPlaylists = (playlistFiles: string[]) => {
       void localMusic.reorderPlaylists(playlistFiles)
+    }
+
+    const scrollToPlayingMusicInList = () => {
+      const musicId = playMusicInfo.musicInfo?.id
+      if (!musicId) return
+      void nextTick(() => {
+        musicTable.refreshMusicTableLayout()
+        void nextTick(() => {
+          const index = musicTable.sortedMusicFiles.value.findIndex(item => item.id === musicId)
+          if (index < 0) return
+          musicTable.scrollToMusicIndex(index)
+        })
+      })
+    }
+
+    const handleLocatePlayingMusic = () => {
+      if (playMusicInfo.listId !== LOCAL_MUSIC_QUEUE_ID) return
+      const musicId = playMusicInfo.musicInfo?.id
+      if (!musicId) return
+      const queueKey = localQueue.activeLocalQueueKey.value
+      if (!queueKey) return
+
+      const clearSearchIfNeeded = () => {
+        if (!localMusic.state.value.searchText) return
+        searchInputText.value = ''
+        localMusic.state.value.searchText = ''
+      }
+
+      const switchToQueueView = async() => {
+        clearSearchIfNeeded()
+        if (queueKey.startsWith('playlist:')) {
+          const playlistPath = queueKey.slice('playlist:'.length)
+          const playlistDirPath = dirname(playlistPath)
+          const directory = localMusic.state.value.directories.find(item => item.path === playlistDirPath)
+          if (!directory) return false
+          if (localMusic.state.value.currentDirectory?.id !== directory.id) {
+            await localMusic.selectDirectory(directory)
+          }
+          if (localMusic.state.value.currentPlaylist !== playlistPath) {
+            await localMusic.selectPlaylist(playlistPath)
+          }
+          return true
+        }
+        if (queueKey.startsWith('all:')) {
+          const directoryId = queueKey.slice('all:'.length)
+          const directory = localMusic.state.value.directories.find(item => item.id === directoryId)
+          if (!directory) return false
+          if (localMusic.state.value.currentDirectory?.id !== directory.id) {
+            await localMusic.selectDirectory(directory)
+          }
+          if (localMusic.state.value.currentPlaylist != null) {
+            await localMusic.showAllFiles()
+          }
+          return true
+        }
+        return false
+      }
+
+      switchToQueueView().then(switched => {
+        if (!switched) return
+        scrollToPlayingMusicInList()
+      }).catch(err => {
+        console.error(err)
+      })
     }
 
     const handlePlaylistContextMenu = (event: MouseEvent, playlistPath: string) => {
@@ -712,6 +777,7 @@ export default {
       playlistMenus,
       rightClickPlaylistPath,
       handleReorderPlaylists,
+      handleLocatePlayingMusic,
       handleToggleDirectoryPopover,
       handleSelectDirectory,
       handleRemoveDirectory,

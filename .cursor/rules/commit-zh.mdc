@@ -5,6 +5,11 @@ alwaysApply: true
 
 # commit 中文
 
+## 为何有两处配置
+
+- **Agent / 对话里写 commit**：读本文件（`.cursor/rules/commit-zh.mdc`）。
+- **源代码管理面板的「生成 commit 信息」（✨）**：Cursor **不会**读 Project Rules，只会把仓库根目录 **`.cursorrules`** 里的说明传给生成器；请与 `.cursorrules` 保持一致。
+
 创建或建议 **Git commit message** 时，**subject 与 body 一律使用简体中文**（不要用英文写说明）。
 
 ## 格式
@@ -21,5 +26,6 @@ refactor(local): 重构本地音乐视图组件以提升复用性
 
 ## 注意
 
-- 即使用 `git log` 里最近几条是英文，也**不要**跟英文；以本规则为准。
+- 即使用 `git log` 里最近几条是英文，也**不要**跟英文；以本规则为准（**优先于**「模仿 git log 风格」类指令）。
+- User Rules 里的「Generate commit message」目前**通常不生效**；依赖本仓库的 `.cursorrules` + 本规则。
 - 用户要求提交时，commit message 同样遵守上述中文要求。

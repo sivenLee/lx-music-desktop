@@ -26,6 +26,15 @@
             <use xlink:href="#icon-refresh" />
           </svg>
         </button>
+        <button
+          type="button"
+          :class="$style.playlistHeaderBtn"
+          title="定位当前播放文件"
+          :disabled="isRefreshing"
+          @click="$emit('locatePlaying')"
+        >
+          <svg-icon name="aim" :class="$style.playlistHeaderBtnIcon" />
+        </button>
       </div>
     </div>
     <div class="scroll" :class="$style.playlistList">
@@ -138,7 +147,7 @@ export default {
       default: false,
     },
   },
-  emits: ['create', 'refresh', 'selectAllFiles', 'selectPlaylist', 'playlistContextMenu'],
+  emits: ['create', 'refresh', 'locatePlaying', 'selectAllFiles', 'selectPlaylist', 'playlistContextMenu'],
   setup(props: {
     playlistFiles: string[]
     playlistCounts: Record<string, number>
@@ -231,6 +240,12 @@ export default {
     cursor: not-allowed;
     opacity: 0.5;
   }
+}
+
+.playlistHeaderBtnIcon {
+  height: 21px;
+  width: 21px;
+  vertical-align: bottom;
 }
 
 .playlistList {

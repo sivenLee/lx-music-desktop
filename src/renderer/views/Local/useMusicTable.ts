@@ -1,5 +1,6 @@
 import { ref, computed, watch, reactive, nextTick, type Ref, type ComputedRef } from '@common/utils/vueTools'
 import { debounce } from '@common/utils'
+import { scrollTo } from '@common/utils/renderer'
 import type { useLocalMusic } from './useLocalMusic'
 import {
   LOCAL_MUSIC_COLUMNS,
@@ -224,6 +225,27 @@ export function useMusicTable({
     updateMusicTableViewport()
   }
 
+  const scrollToMusicIndex = (index: number, animate = true) => {
+    const tableElement = getMusicTableElement()
+    if (!tableElement || index < 0) return
+    updateMusicTableViewport()
+    const viewportBody = Math.max(musicTableViewportHeight.value - LOCAL_MUSIC_HEADER_HEIGHT, 0)
+    const rowTop = LOCAL_MUSIC_HEADER_HEIGHT + index * LOCAL_MUSIC_ROW_HEIGHT
+    const targetScroll = Math.max(0, rowTop - viewportBody * 0.38)
+    const applyScrollTop = (scrollTop: number) => {
+      musicTableScrollTop.value = scrollTop
+      updateMusicTableViewport()
+    }
+    if (!animate) {
+      tableElement.scrollTop = targetScroll
+      applyScrollTop(targetScroll)
+      return
+    }
+    scrollTo(tableElement, targetScroll, 300, () => {
+      applyScrollTop(tableElement.scrollTop)
+    })
+  }
+
   const persistDirectoryConfig = debounce(() => {
     if (isApplyingDirectoryConfig.value || !selectedDirectory.value) return
     void localMusic.saveDirectoryConfig({
@@ -297,6 +319,7 @@ export function useMusicTable({
     getColumnStyle,
     getColumnSortMark,
     handleMusicTableScroll,
+    scrollToMusicIndex,
     resetMusicTableScroll,
     refreshMusicTableLayout,
     updateMusicTableViewport,
