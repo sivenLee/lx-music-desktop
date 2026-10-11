@@ -138,6 +138,11 @@ export class AppEvent extends Event {
     this.emit('picUpdated')
   }
 
+  /** 本地音乐文件封面已变更（元信息写入等） */
+  localMusicCoverUpdated(filePath: string) {
+    this.emit('localMusicCoverUpdated', filePath)
+  }
+
   // 更新歌词事件
   lyricUpdated() {
     this.emit('lyricUpdated')

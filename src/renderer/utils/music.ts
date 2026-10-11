@@ -280,6 +280,38 @@ export const getLocalMusicCoverUrl = async(path: string) => {
   return getDetailCoverUrl(path)
 }
 
+const localMusicCoverUrlCache = new Map<string, string>()
+const localMusicCoverPromiseCache = new Map<string, Promise<string>>()
+
+export const clearLocalMusicCoverUrlCache = (filePath?: string) => {
+  if (filePath) {
+    localMusicCoverUrlCache.delete(filePath)
+    localMusicCoverPromiseCache.delete(filePath)
+    return
+  }
+  localMusicCoverUrlCache.clear()
+  localMusicCoverPromiseCache.clear()
+}
+
+export const loadCachedLocalMusicCoverUrl = async(filePath: string, options?: {
+  refresh?: boolean
+}) => {
+  if (options?.refresh) clearLocalMusicCoverUrlCache(filePath)
+  if (localMusicCoverUrlCache.has(filePath)) return localMusicCoverUrlCache.get(filePath) ?? ''
+  if (localMusicCoverPromiseCache.has(filePath)) return localMusicCoverPromiseCache.get(filePath) ?? ''
+  const promise = getLocalMusicCoverUrl(filePath).then(url => {
+    localMusicCoverUrlCache.set(filePath, url)
+    localMusicCoverPromiseCache.delete(filePath)
+    return url
+  }).catch(err => {
+    console.log(err)
+    localMusicCoverPromiseCache.delete(filePath)
+    return ''
+  })
+  localMusicCoverPromiseCache.set(filePath, promise)
+  return promise
+}
+
 const getCoverInfoFields = async(path: string): Promise<LocalMusicDetailField[]> => {
   const picture = await getLocalMusicFilePic(path)
   if (!picture) return []

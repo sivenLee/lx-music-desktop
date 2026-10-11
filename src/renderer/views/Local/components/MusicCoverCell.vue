@@ -14,26 +14,7 @@
 
 <script lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from '@common/utils/vueTools'
-import { getLocalMusicCoverUrl } from '@renderer/utils/music'
-
-const coverUrlCache = new Map<string, string>()
-const coverPromiseCache = new Map<string, Promise<string>>()
-
-const loadCoverUrl = async(filePath: string) => {
-  if (coverUrlCache.has(filePath)) return coverUrlCache.get(filePath) ?? ''
-  if (coverPromiseCache.has(filePath)) return coverPromiseCache.get(filePath) ?? ''
-  const promise = getLocalMusicCoverUrl(filePath).then(url => {
-    coverUrlCache.set(filePath, url)
-    coverPromiseCache.delete(filePath)
-    return url
-  }).catch(err => {
-    console.log(err)
-    coverPromiseCache.delete(filePath)
-    return ''
-  })
-  coverPromiseCache.set(filePath, promise)
-  return promise
-}
+import { loadCachedLocalMusicCoverUrl } from '@renderer/utils/music'
 
 export default {
   name: 'MusicCoverCell',
@@ -55,40 +36,47 @@ export default {
     const coverUrl = ref('')
     let observer: IntersectionObserver | null = null
 
-    const syncCoverUrl = async() => {
+    const syncCoverUrl = async(refresh = false) => {
       const targetPath = props.filePath
-      const url = await loadCoverUrl(targetPath)
+      const url = await loadCachedLocalMusicCoverUrl(targetPath, { refresh })
       if (props.filePath === targetPath) coverUrl.value = url
     }
 
     const startObserve = () => {
       if (!coverRef.value) return
-      if (coverUrlCache.has(props.filePath)) {
-        coverUrl.value = coverUrlCache.get(props.filePath) ?? ''
-        return
-      }
       observer?.disconnect()
       observer = new IntersectionObserver(entries => {
         if (!entries.some(entry => entry.isIntersecting)) return
         observer?.disconnect()
-        void syncCoverUrl()
+        syncCoverUrl().catch(err => {
+          console.log(err)
+        })
       }, {
         rootMargin: '120px',
       })
       observer.observe(coverRef.value)
     }
 
+    const handleLocalMusicCoverUpdated = (filePath: string) => {
+      if (filePath !== props.filePath) return
+      syncCoverUrl(true).catch(err => {
+        console.log(err)
+      })
+    }
+
     watch(() => props.filePath, () => {
-      coverUrl.value = coverUrlCache.get(props.filePath) ?? ''
+      coverUrl.value = ''
       startObserve()
     })
 
     onMounted(() => {
       startObserve()
+      window.app_event.on('localMusicCoverUpdated', handleLocalMusicCoverUpdated)
     })
 
     onBeforeUnmount(() => {
       observer?.disconnect()
+      window.app_event.off('localMusicCoverUpdated', handleLocalMusicCoverUpdated)
     })
 
     return {

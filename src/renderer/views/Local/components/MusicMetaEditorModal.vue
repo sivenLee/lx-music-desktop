@@ -242,12 +242,12 @@
 <script lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from '@common/utils/vueTools'
 import {
-  clearLocalMusicMetadataCache,
   getCoverInfoFromSource,
   getLocalMusicEditInfo,
   isLocalMusicMetaEditable,
   type LocalMusicEditInfo,
 } from '@renderer/utils/music'
+import { notifyLocalMusicCoverChanged } from '@renderer/utils/localMusicCoverRefresh'
 import { localMusicWriteMusicMeta, showSelectDialog, generateMusicTags } from '@renderer/utils/ipc'
 import { encodePath } from '@common/utils/common'
 import { dialog } from '@renderer/plugins/Dialog'
@@ -661,7 +661,7 @@ export default {
           filePath: form.filePath,
           meta,
         })
-        clearLocalMusicMetadataCache(form.filePath)
+        await notifyLocalMusicCoverChanged(form.filePath)
         isDirty.value = false
         emit('saved', updated)
         await loadForm(updated)

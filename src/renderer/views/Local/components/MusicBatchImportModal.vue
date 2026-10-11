@@ -207,9 +207,9 @@ import { basename, dirname } from '@common/utils/nodejs'
 import { dialog } from '@renderer/plugins/Dialog'
 import {
   getLocalMusicEditInfo,
-  clearLocalMusicMetadataCache,
   isLocalMusicMetaEditable,
 } from '@renderer/utils/music'
+import { notifyLocalMusicCoverChanged } from '@renderer/utils/localMusicCoverRefresh'
 import {
   localMusicReadJsonFile,
   localMusicWriteMusicMeta,
@@ -556,7 +556,7 @@ export default {
             meta,
             skipSongsCache: true,
           })
-          clearLocalMusicMetadataCache(row.filePath)
+          await notifyLocalMusicCoverChanged(row.filePath)
           row.status = 1
           row.error = ''
           savedMusicInfos.push(updated)
