@@ -202,6 +202,11 @@
       v-model:visible="isBatchImportVisible"
       @saved="handleBatchImportSaved"
     />
+    <MusicSaveAsModal
+      v-model:visible="isMusicSaveAsVisible"
+      :music-info="musicSaveAsTarget"
+      @play="handlePlayMusic"
+    />
   </div>
 </template>
 
@@ -223,11 +228,12 @@ import MusicTable from './components/MusicTable.vue'
 import MusicDetailModal from './components/MusicDetailModal.vue'
 import MusicMetaEditorModal from './components/MusicMetaEditorModal.vue'
 import MusicBatchImportModal from './components/MusicBatchImportModal.vue'
+import MusicSaveAsModal from './components/MusicSaveAsModal.vue'
 import PlaylistNameEditor from './components/PlaylistNameEditor.vue'
 import PlaylistSourceEditor from './components/PlaylistSourceEditor.vue'
 import MusicAddModal from './components/MusicAddModal.vue'
 import { playMusicInfo } from '@renderer/store/player/state'
-import { isLocalMusicMetaEditable } from '@renderer/utils/music'
+import { isLocalMusicMetaEditable, isLocalMusicSaveAsSupported } from '@renderer/utils/music'
 import { openDirInExplorer, localMusicExportSongs } from '@renderer/utils/ipc'
 import { checkPath } from '@common/utils/nodejs'
 
@@ -242,6 +248,7 @@ export default {
     MusicDetailModal,
     MusicMetaEditorModal,
     MusicBatchImportModal,
+    MusicSaveAsModal,
     PlaylistNameEditor,
     PlaylistSourceEditor,
     MusicAddModal,
@@ -323,6 +330,11 @@ export default {
         action: 'file',
       },
       {
+        name: t('list__save_as'),
+        action: 'saveAs',
+        disabled: !rightClickMusicInfo.value || !isLocalMusicSaveAsSupported(rightClickMusicInfo.value.meta.filePath),
+      },
+      {
         name: t('list__remove'),
         action: 'remove',
         disabled: !localMusic.state.value.currentPlaylist,
@@ -342,6 +354,8 @@ export default {
     const isMusicMetaEditorVisible = ref(false)
     const musicMetaEditorTarget = ref<LX.Music.MusicInfoLocal | null>(null)
     const isBatchImportVisible = ref(false)
+    const isMusicSaveAsVisible = ref(false)
+    const musicSaveAsTarget = ref<LX.Music.MusicInfoLocal | null>(null)
 
     const handleToggleDirectoryPopover = () => {
       if (localMusic.state.value.isRefreshing) return
@@ -554,6 +568,20 @@ export default {
           openDirInExplorer(filePath)
           break
         }
+        case 'saveAs': {
+          const filePath = musicInfo.meta.filePath
+          if (!filePath || !isLocalMusicSaveAsSupported(filePath)) {
+            await dialog(t('local_music_save_as_unsupported_format'))
+            return
+          }
+          if (!await checkPath(filePath)) {
+            await dialog('本地文件不存在，可能已被移动或删除')
+            return
+          }
+          musicSaveAsTarget.value = musicInfo
+          isMusicSaveAsVisible.value = true
+          break
+        }
         case 'remove': {
           const playlistPath = localMusic.state.value.currentPlaylist
           if (!playlistPath) return
@@ -721,6 +749,8 @@ export default {
       handleMusicMetaSaved,
       isBatchImportVisible,
       handleBatchImportSaved,
+      isMusicSaveAsVisible,
+      musicSaveAsTarget,
       handlePlayMusic,
       handleShowSelectedMusicAddModal,
       handleRemoveSelectedMusics,

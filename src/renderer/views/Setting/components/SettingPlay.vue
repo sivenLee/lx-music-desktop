@@ -45,6 +45,21 @@ dd(:aria-label="$t('setting__play_mediaDevice_title')")
   h3#play_mediaDevice {{ $t('setting__play_mediaDevice') }}
   div
     base-selection.gap-left(v-model="mediaDeviceId" :list="mediaDevices" item-key="deviceId" item-name="label" @change="handleMediaDeviceIdChnage")
+
+dd(:aria-label="$t('setting__play_ffmpeg_title')")
+  h3#play_ffmpeg {{ $t('setting__play_ffmpeg_title') }}
+  div(:class="$style.ffmpegRow")
+    input.gap-left(
+      id="setting_player_ffmpeg_path"
+      :class="$style.ffmpegInput"
+      type="text"
+      :value="appSetting['player.ffmpegPath']"
+      :placeholder="$t('setting__play_ffmpeg_placeholder')"
+      @change="handleFfmpegPathInput"
+    )
+    base-btn.gap-left(min @click="handleBrowseFfmpeg") {{ $t('setting__play_ffmpeg_browse') }}
+  .gap-top
+    svg-icon(class="help-icon" name="help-circle-outline" :aria-label="$t('setting__play_ffmpeg_tip')")
 </template>
 
 <script>
@@ -57,6 +72,7 @@ import { setPowerSaveBlocker } from '@renderer/core/player/utils'
 import { isPlay } from '@renderer/store/player/state'
 import { TRY_QUALITYS_LIST } from '@renderer/core/music/utils'
 import { isMac } from '@common/utils'
+import { showSelectDialog } from '@renderer/utils/ipc'
 
 
 export default {
@@ -119,6 +135,25 @@ export default {
     }
 
     const isMaxOutputChannelCount = ref(appSetting['player.isMaxOutputChannelCount'])
+    const handleFfmpegPathInput = (event) => {
+      const target = event.target
+      if (!(target instanceof HTMLInputElement)) return
+      updateSetting({ 'player.ffmpegPath': target.value.trim() })
+    }
+
+    const handleBrowseFfmpeg = () => {
+      void showSelectDialog({
+        title: t('setting__play_ffmpeg_browse'),
+        properties: ['openFile'],
+        filters: [
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      }).then((result) => {
+        if (result.canceled || !result.filePaths[0]) return
+        updateSetting({ 'player.ffmpegPath': result.filePaths[0] })
+      })
+    }
+
     const handleUpdateMaxOutputChannelCount = async(enabled) => {
       isMaxOutputChannelCount.value = enabled
       if (appSetting['player.mediaDeviceId'] != 'default') {
@@ -149,7 +184,25 @@ export default {
       handleUpdateMaxOutputChannelCount,
       playQualityList,
       isMac,
+      handleFfmpegPathInput,
+      handleBrowseFfmpeg,
     }
   },
 }
 </script>
+
+<style lang="less" module>
+.ffmpegRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ffmpegInput {
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 480px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+</style>

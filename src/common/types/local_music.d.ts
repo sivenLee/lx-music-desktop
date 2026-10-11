@@ -43,5 +43,24 @@ declare namespace LX {
       /** 本地快捷搜索参与字段（仅影响关键词搜索，按目录持久化） */
       keywordSearchFields?: string[]
     }
+
+    interface SaveAsSourceInfo {
+      sampleRate: number
+      bitsPerSample: number | null
+      bitrateKbps: number | null
+      codec: string
+      container: string
+      channels: number | null
+      lossless: boolean | null
+    }
+
+    interface SaveAsEncodeOptions {
+      sampleRate: number
+      flacBitDepth: 0 | 16 | 24
+      flacCompressionLevel: number
+      mp3BitrateKbps: number
+      preserveMetadata: boolean
+      preserveLyrics: boolean
+    }
   }
 }

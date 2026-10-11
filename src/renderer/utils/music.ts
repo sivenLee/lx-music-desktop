@@ -395,6 +395,8 @@ export const isLocalMusicMetaEditable = (filePath: string) => {
   return LOCAL_MUSIC_EDITABLE_EXTS.has(extname(filePath).replace(/^\./, '').toLowerCase())
 }
 
+export { isLocalMusicSaveAsSourcePath as isLocalMusicSaveAsSupported } from '@common/utils/ffmpegAudioSaveAs'
+
 export const clearLocalMusicMetadataCache = (filePath?: string) => {
   if (filePath) {
     metadataPromiseMap.delete(filePath)

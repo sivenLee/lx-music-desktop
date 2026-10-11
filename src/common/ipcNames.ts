@@ -31,6 +31,8 @@ const modules = {
     export_songs: 'local_music_export_songs',
     read_json_file: 'local_music_read_json_file',
     write_json_file: 'local_music_write_json_file',
+    save_as_audio: 'local_music_save_as_audio',
+    get_save_as_source_info: 'local_music_get_save_as_source_info',
   },
   player: {
     invoke_play_music: 'play_music',

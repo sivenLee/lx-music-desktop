@@ -12,6 +12,12 @@ import {
   buildLyricsPreview,
 } from '@common/utils/localMusic'
 import { setMeta } from '@common/utils/musicMeta'
+import {
+  transcodeLocalMusicSaveAs,
+  probeSaveAsSourceInfo,
+  type LocalMusicSaveAsTargetFormat,
+  type LocalMusicSaveAsEncodeOptions,
+} from '@common/utils/ffmpegAudioSaveAs'
 import path from 'node:path'
 
 const LOCAL_MUSIC_STORE_NAME = 'localMusic'
@@ -935,5 +941,34 @@ export default () => {
     const targetPath = `${params.filePath ?? ''}`.trim()
     if (!targetPath) throw new Error('File path is required')
     await writeJsonFileAtomic(targetPath, params.data)
+  })
+
+  mainHandle<string, Awaited<ReturnType<typeof probeSaveAsSourceInfo>>>(
+    LOCAL_MUSIC_EVENT_NAME.get_save_as_source_info,
+    async({ params: filePath }) => {
+      const targetPath = `${filePath ?? ''}`.trim()
+      if (!targetPath) throw new Error('File path is required')
+      if (!await checkPath(targetPath)) throw new Error('Source file not found')
+      return probeSaveAsSourceInfo(targetPath)
+    },
+  )
+
+  mainHandle<{
+    sourcePath: string
+    outputPath: string
+    targetFormat: LocalMusicSaveAsTargetFormat
+    pitchSemitones: number
+    encodeOptions: LocalMusicSaveAsEncodeOptions
+  }, { outputPath: string }>(LOCAL_MUSIC_EVENT_NAME.save_as_audio, async({ params }) => {
+    const ffmpegPath = global.lx.appSetting['player.ffmpegPath'] ?? ''
+    await transcodeLocalMusicSaveAs({
+      sourcePath: params.sourcePath,
+      outputPath: params.outputPath,
+      targetFormat: params.targetFormat,
+      pitchSemitones: params.pitchSemitones,
+      encodeOptions: params.encodeOptions,
+      ffmpegPath,
+    })
+    return { outputPath: path.resolve(params.outputPath) }
   })
 }

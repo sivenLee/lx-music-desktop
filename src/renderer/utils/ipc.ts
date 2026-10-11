@@ -1052,6 +1052,29 @@ export const localMusicWriteJsonFile = async(params: {
   }>(LOCAL_MUSIC_EVENT_NAME.write_json_file, params)
 }
 
+export const localMusicGetSaveAsSourceInfo = async(filePath: string) => {
+  return rendererInvoke<string, LX.LocalMusic.SaveAsSourceInfo>(
+    LOCAL_MUSIC_EVENT_NAME.get_save_as_source_info,
+    filePath,
+  )
+}
+
+export const localMusicSaveAsAudio = async(params: {
+  sourcePath: string
+  outputPath: string
+  targetFormat: 'flac' | 'mp3'
+  pitchSemitones: number
+  encodeOptions: LX.LocalMusic.SaveAsEncodeOptions
+}) => {
+  return rendererInvoke<{
+    sourcePath: string
+    outputPath: string
+    targetFormat: 'flac' | 'mp3'
+    pitchSemitones: number
+    encodeOptions: LX.LocalMusic.SaveAsEncodeOptions
+  }, { outputPath: string }>(LOCAL_MUSIC_EVENT_NAME.save_as_audio, params)
+}
+
 export const generateMusicTags = async(params: {
   title: string
   artist: string

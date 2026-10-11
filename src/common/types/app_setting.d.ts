@@ -280,6 +280,11 @@ declare global {
       'player.soundEffect.pitchShifter.playbackRate': number
 
       /**
+       * FFmpeg 可执行文件路径，留空则使用系统 PATH 中的 ffmpeg
+       */
+      'player.ffmpegPath': string
+
+      /**
        * 是否启用音频加载失败时自动切歌
        */
       'player.autoSkipOnError': boolean

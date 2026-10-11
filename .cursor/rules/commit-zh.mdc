@@ -1,0 +1,25 @@
+---
+description: Git commit message 使用简体中文
+alwaysApply: true
+---
+
+# commit 中文
+
+创建或建议 **Git commit message** 时，**subject 与 body 一律使用简体中文**（不要用英文写说明）。
+
+## 格式
+
+沿用本仓库的 Conventional Commits：**type(scope)** 仍用英文常见写法，**冒号后的说明用中文**。
+
+示例：
+
+```
+feat(local): 添加批量导出音乐 JSON 功能
+fix(renderer): 修复排序后播放队列未同步的问题
+refactor(local): 重构本地音乐视图组件以提升复用性
+```
+
+## 注意
+
+- 即使用 `git log` 里最近几条是英文，也**不要**跟英文；以本规则为准。
+- 用户要求提交时，commit message 同样遵守上述中文要求。
