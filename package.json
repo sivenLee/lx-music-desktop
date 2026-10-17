@@ -1,5 +1,5 @@
 {
-  "name": "lx-music-desktop",
+  "name": "im-music-desktop",
   "version": "2.12.2",
   "description": "一个免费的音乐查找助手",
   "main": "./dist/main.js",
@@ -76,16 +76,16 @@
   },
   "macLanguagesInfoPlistStrings": {
     "en": {
-      "CFBundleDisplayName": "LX Music",
-      "CFBundleName": "LX Music"
+      "CFBundleDisplayName": "IM Music",
+      "CFBundleName": "IM Music"
     },
     "zh_CN": {
-      "CFBundleDisplayName": "LX Music",
-      "CFBundleName": "LX Music"
+      "CFBundleDisplayName": "IM Music",
+      "CFBundleName": "IM Music"
     },
     "zh_TW": {
-      "CFBundleDisplayName": "LX Music",
-      "CFBundleName": "LX Music"
+      "CFBundleDisplayName": "IM Music",
+      "CFBundleName": "IM Music"
     }
   },
   "repository": {

@@ -1,3 +1,4 @@
+import { URL_SCHEME } from '@common/constants'
 import { onBeforeUnmount } from '@common/utils/vueTools'
 import { clearEnvParamsDeeplink, focusWindow, onDeeplink } from '@renderer/utils/ipc'
 
@@ -19,7 +20,7 @@ export default () => {
   const handleLinkAction = async(link: string) => {
     // console.log(link)
     const [url, search] = link.split('?')
-    const [type, action, ...paths] = url.replace('lxmusic://', '').split('/')
+    const [type, action, ...paths] = url.replace(`${URL_SCHEME}://`, '').split('/')
     const params: {
       paths: string[]
       data?: any

@@ -1,3 +1,4 @@
+import { OFFICIAL_UPDATE_DISABLED } from '@common/constants'
 import { checkUpdate, getEnvParams, getViewPrevState, sendInited } from '@renderer/utils/ipc'
 
 import { proxy, isFullscreen, themeId } from '@renderer/store'
@@ -71,7 +72,7 @@ export default () => {
       sendInited()
 
       handleListAutoUpdate()
-      if (window.lx.isProd && appSetting['common.isAgreePact']) checkUpdate()
+      if (!OFFICIAL_UPDATE_DISABLED && window.lx.isProd && appSetting['common.isAgreePact']) checkUpdate()
     })
   })
 }

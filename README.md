@@ -160,3 +160,11 @@
 ---
 
 若对此有疑问请 mail to: lyswhut+qq.com (请将 `+` 替换为 `@`)
+
+### MAC兼容打包命令
+```
+hdiutil create -volname "IM Music v2.12.2" \
+  -srcfolder "build/mac/IM Music.app" \
+  -ov -format UDZO \
+  "build/IM Music-2.12.2-x64.dmg"
+```

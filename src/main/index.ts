@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { APP_DISPLAY_NAME } from '@common/constants'
 import './utils/logInit'
 import '@common/error'
 import {
@@ -23,6 +24,7 @@ const init = () => {
 }
 
 initGlobalData()
+app.setName(APP_DISPLAY_NAME)
 initSingleInstanceHandle()
 applyElectronEnvParams()
 setUserDataPath()

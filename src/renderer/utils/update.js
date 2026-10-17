@@ -1,3 +1,4 @@
+import { OFFICIAL_UPDATE_DISABLED } from '@common/constants'
 import { httpGet } from './request'
 import pkg from '../../../package.json'
 
@@ -48,6 +49,14 @@ const getNpmPkgInfo = async(url) => {
 }
 
 export const getVersionInfo = async(index = 0) => {
+  if (OFFICIAL_UPDATE_DISABLED) {
+    return {
+      version: pkg.version,
+      desc: '',
+      history: [],
+    }
+  }
+
   const [url, source] = address[index]
   let promise
   switch (source) {

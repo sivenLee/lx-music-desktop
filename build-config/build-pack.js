@@ -9,15 +9,15 @@ const afterPack = require('./build-after-pack')
 * @see https://www.electron.build/configuration/configuration
 */
 const options = {
-  appId: 'cn.toside.music.desktop',
-  productName: 'lx-music-desktop',
+  appId: 'com.im.music.desktop',
+  productName: 'im-music-desktop',
   electronDist: './node_modules/electron/dist',
   beforePack,
   afterPack,
   protocols: {
-    name: 'lx-music-protocol',
+    name: 'im-music-protocol',
     schemes: [
-      'lxmusic',
+      'immusic',
     ],
   },
   directories: {
@@ -69,7 +69,7 @@ const winOptions = {
     allowToChangeInstallationDirectory: true,
     // differentialPackage: true,
     license: './licenses/license.rtf',
-    shortcutName: 'LX Music',
+    shortcutName: 'IM Music',
   },
 }
 /**
@@ -88,11 +88,11 @@ const linuxOptions = {
       // https://specifications.freedesktop.org/desktop-entry-spec/latest/example.html
       // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html#desktop-files
       entry: {
-        Name: 'LX Music',
-        'Name[zh_CN]': 'LX Music',
-        'Name[zh_TW]': 'LX Music',
+        Name: 'IM Music',
+        'Name[zh_CN]': 'IM Music',
+        'Name[zh_TW]': 'IM Music',
         Encoding: 'UTF-8',
-        MimeType: 'x-scheme-handler/lxmusic',
+        MimeType: 'x-scheme-handler/immusic',
         StartupNotify: 'false',
       },
     },
@@ -129,7 +129,7 @@ const macOptions = {
         path: '/Applications',
       },
     ],
-    title: 'LX Music v${version}',
+    title: 'IM Music v${version}',
   },
 }
 

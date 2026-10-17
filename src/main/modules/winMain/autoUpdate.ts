@@ -1,4 +1,5 @@
 import { autoUpdater } from 'electron-updater'
+import { OFFICIAL_UPDATE_DISABLED } from '@common/constants'
 import { log, isWin } from '@common/utils'
 import { mainOn } from '@common/mainIpc'
 import { isExistWindow, sendEvent } from './index'
@@ -124,6 +125,8 @@ export default () => {
 }
 
 const checkUpdate = () => {
+  if (OFFICIAL_UPDATE_DISABLED) return
+
   // if (!isFirstCheckedUpdate) {
   //   if (waitEvent.length) {
   //     waitEvent.forEach((event, index) => {

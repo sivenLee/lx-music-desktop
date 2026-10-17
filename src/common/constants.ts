@@ -1,4 +1,9 @@
-export const URL_SCHEME_RXP = /^lxmusic:\/\//
+export const APP_DISPLAY_NAME = 'IM Music'
+export const APP_BUNDLE_ID = 'com.im.music.desktop'
+export const URL_SCHEME = 'immusic'
+export const URL_SCHEME_RXP = /^immusic:\/\//
+/** 自用 fork：不请求 LX Music 官方版本信息与 electron-updater 发布源 */
+export const OFFICIAL_UPDATE_DISABLED = true
 
 export const SPLIT_CHAR = {
   DISLIKE_NAME: '@',
