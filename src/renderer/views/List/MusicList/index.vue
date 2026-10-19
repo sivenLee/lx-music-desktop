@@ -285,7 +285,7 @@ export default {
     const handleOpenFile = async(index) => {
       const musicInfo = await resolveLocalMusic(index)
       if (!musicInfo) return
-      openDirInExplorer(musicInfo.meta.filePath)
+      await openDirInExplorer(musicInfo.meta.filePath)
     }
 
     const handleMusicMetaEditorChange = (musicInfo) => {

@@ -1,3 +1,4 @@
+import '@common/utils/patchNodeUrlParse'
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import needle from 'needle'
 import zlib from 'zlib'

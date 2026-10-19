@@ -21,6 +21,11 @@ const patchs = [
     '"default": "./lib/core.js"',
     '"default": "./lib/index.js"',
   ],
+  [
+    path.join(rootPath, './node_modules/electron-devtools-installer/dist/downloadChromeExtension.js'),
+    'prodversion=32',
+    'prodversion=${process.versions.chrome}',
+  ],
 ]
 
 ;(async() => {

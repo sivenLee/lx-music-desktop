@@ -522,14 +522,18 @@ export default {
 }
 .sourceInfoRow {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
   font-size: 12px;
+  min-width: 0;
 }
 .sourceInfoLabel {
+  flex: none;
   opacity: 0.7;
 }
 .sourceInfoValue {
+  min-width: 0;
   word-break: break-word;
 }
 .resampleHint {

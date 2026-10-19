@@ -5,10 +5,28 @@
  *  environment.
  */
 
-import { app } from 'electron'
+import { app, session, type Session } from 'electron'
 import electronDebug from 'electron-debug'
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 import { openDevTools } from './utils'
+
+// Electron 40 起 session.getAllExtensions 等接口会打印弃用警告。
+// electron-debug 与 devtools installer 仍调用旧接口，这里改接到 session.extensions。
+const bindSessionExtensionApi = (ses: Session) => {
+  const extensions = ses.extensions
+  ses.getAllExtensions = () => extensions.getAllExtensions()
+  ses.loadExtension = async(extensionPath, options) => extensions.loadExtension(extensionPath, options)
+  ses.removeExtension = (extensionId) => {
+    extensions.removeExtension(extensionId)
+  }
+}
+
+app.whenReady().then(() => {
+  bindSessionExtensionApi(session.defaultSession)
+}).catch((err: Error) => {
+  console.log('[dev] Failed to bind extension API: ', err)
+})
+
 // Install `electron-debug` with `devtron`
 electronDebug({
   showDevTools: false,
@@ -19,6 +37,7 @@ electronDebug({
 app.on('ready', () => {
   global.lx.event_app.on('main_window_created', (win) => {
     openDevTools(win.webContents)
+    bindSessionExtensionApi(win.webContents.session)
     installExtension(VUEJS_DEVTOOLS, { session: win.webContents.session })
       .then((name: string) => {
         console.log(`[main window] Added Extension:  ${name}`)
@@ -29,6 +48,7 @@ app.on('ready', () => {
   })
   global.lx.event_app.on('desktop_lyric_window_created', (win) => {
     openDevTools(win.webContents)
+    bindSessionExtensionApi(win.webContents.session)
     installExtension(VUEJS_DEVTOOLS, { session: win.webContents.session })
       .then((name: string) => {
         console.log(`[lyric window] Added Extension:  ${name}`)

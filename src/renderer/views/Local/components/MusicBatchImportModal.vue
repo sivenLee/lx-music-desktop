@@ -549,7 +549,7 @@ export default {
         row.error = ''
         try {
           const meta = await buildWriteMeta(row)
-          const dirPath = fileData.value?.dirPath || dirname(row.filePath)
+          const dirPath = fileData.value?.dirPath ?? dirname(row.filePath)
           const updated = await localMusicWriteMusicMeta({
             dirPath,
             filePath: row.filePath,

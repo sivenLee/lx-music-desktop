@@ -1,3 +1,4 @@
+import '@common/utils/patchNodeUrlParse'
 import '@common/error'
 import { createApp } from 'vue'
 

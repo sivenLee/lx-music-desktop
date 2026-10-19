@@ -7,6 +7,14 @@ module.exports = {
   target: 'electron-main',
   output: {
     filename: '[name].js',
+    // 主进程和渲染进程都输出到 dist，默认异步分包都是 [id].js。
+    // 并行打包时渲染进程会覆盖主进程分包（music-metadata 即其中之一）。
+    // 首次扫描没有缓存的目录时，主进程 require 到渲染进程分包并失败，歌曲列表为空。
+    // 数据库 worker 仍使用固定文件名，避免破坏现有加载路径。
+    chunkFilename: (pathData) => {
+      if (pathData.chunk?.name === 'dbService.worker') return '[name].js'
+      return 'main.[id].js'
+    },
     library: {
       type: 'commonjs2',
     },

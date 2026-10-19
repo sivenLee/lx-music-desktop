@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'development'
 
+const fs = require('fs')
 const chalk = require('chalk')
 const electron = require('electron')
 const path = require('path')
@@ -22,6 +23,16 @@ const { debounce } = require('./utils')
 let electronProcess = null
 let hotMiddlewareRenderer
 let hotMiddlewareRendererLyric
+
+// 旧版 installer 把 Chrome 版本写成 32，商店会返回空文件，解压时报 Cr24。
+const devtoolsInstallerDownload = path.join(__dirname, '../node_modules/electron-devtools-installer/dist/downloadChromeExtension.js')
+try {
+  const installerSource = fs.readFileSync(devtoolsInstallerDownload, 'utf8')
+  const patchedInstallerSource = installerSource.replace('prodversion=32', 'prodversion=${process.versions.chrome}')
+  if (patchedInstallerSource !== installerSource) fs.writeFileSync(devtoolsInstallerDownload, patchedInstallerSource)
+} catch (err) {
+  console.log('skip devtools installer patch:', err.message)
+}
 
 // ResizeObserver 在 HMR/布局抖动时会抛出良性 runtime 告警，webpack overlay 会挡住操作且关闭按钮无效
 const ignoreRuntimeErrorMessages = [

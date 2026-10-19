@@ -630,7 +630,7 @@ export default {
             await dialog('本地文件不存在，可能已被移动或删除')
             return
           }
-          openDirInExplorer(filePath)
+          await openDirInExplorer(filePath)
           break
         }
         case 'saveAs': {
